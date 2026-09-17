@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    {{ event.title }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/components.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/event-detail.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <div class="public-event-page">
+        <div class="container">
+            <nav
+                class="event-breadcrumb"
+                aria-label="Navegação estrutural"
+            >
+                <a href="{% url 'core:home' %}#eventos">
+                    Eventos
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <span aria-current="page">
+                    {{ event.title|truncatechars:45 }}
+                </span>
+            </nav>
+
+            <article>
+                <section
+                    class="event-detail-hero"
+                    aria-labelledby="event-title"
+                >
+                    <div class="event-cover">
+                        {% if event.cover_image %}
+                            <img
+                                class="event-cover__image"
+                                src="{{ event.cover_image.url }}"
+                                alt="Capa do evento {{ event.title }}"
+                                width="960"
+                                height="600"
+                                decoding="async"
+                                fetchpriority="high"
+                            >
+                        {% else %}
+                            <div
+                                class="event-cover__placeholder"
+                                aria-hidden="true"
+                            >
+                                <span>TicketJá</span>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="event-introduction">
+                        <p class="event-introduction__sport">
+                            {{ event.get_sport_category_display }}
+                        </p>
+
+                        <h1 id="event-title">
+                            {{ event.title }}
+                        </h1>
+
+                        <p class="event-introduction__summary">
+                            {{ event.summary }}
+                        </p>
+
+                        <dl class="event-introduction__highlights">
+                            <div>
+                                <dt>Data</dt>
+                                <dd>
+                                    <time
+                                        datetime="{{ event.event_datetime|date:'c' }}"
+                                    >
+                                        {{ event.event_datetime|date:"d/m/Y" }}
+                                        às
+                                        {{ event.event_datetime|date:"H:i" }}
+                                    </time>
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt>Local</dt>
+                                <dd>
+                                    {{ event.city }}/{{ event.state }}
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt>Realização</dt>
+                                <dd>
+                                    {{ event.organization.name }}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <div class="event-registration-panel">
+                            {% if has_open_sales %}
+                                <div>
+                                    <p
+                                        class="
+                                            event-registration-panel__status
+                                            event-registration-panel__status--open
+                                        "
+                                    >
+                                        Inscrições abertas
+                                    </p>
+
+                                    <p class="event-registration-panel__hint">
+                                        Consulte os tipos de ingresso e
+                                        escolha sua modalidade.
+                                    </p>
+                                </div>
+
+                                <a
+                                    class="button button--primary"
+                                    href="{% url 'orders:start' event_id=event.id %}"
+                                >
+                                    Inscrever-se
+                                </a>
+                            {% elif ticket_offers %}
+                                <div>
+                                    <p class="event-registration-panel__status">
+                                        Nenhum lote em venda agora
+                                    </p>
+
+                                    <p class="event-registration-panel__hint">
+                                        Consulte abaixo as próximas datas
+                                        ou os períodos já encerrados.
+                                    </p>
+                                </div>
+
+                                <a
+                                    class="button button--secondary"
+                                    href="#ingressos"
+                                >
+                                    Ver períodos
+                                </a>
+                            {% else %}
+                                <div>
+                                    <p class="event-registration-panel__status">
+                                        Inscrições indisponíveis
+                                    </p>
+
+                                    <p class="event-registration-panel__hint">
+                                        A organização ainda não possui uma
+                                        oferta comercial disponível.
+                                    </p>
+                                </div>
+
+                                <span
+                                    class="
+                                        button
+                                        event-registration-panel__disabled
+                                    "
+                                    aria-disabled="true"
+                                >
+                                    Indisponível
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    class="event-information"
+                    aria-labelledby="event-information-title"
+                >
+                    <div class="section-heading">
+                        <p class="section-heading__eyebrow">
+                            Prepare-se
+                        </p>
+
+                        <h2 id="event-information-title">
+                            Informações do evento
+                        </h2>
+                    </div>
+
+                    <div class="event-information__grid">
+                        <article class="event-information-card">
+                            <span
+                                class="event-information-card__icon"
+                                aria-hidden="true"
+                            >
+                                01
+                            </span>
+
+                            <div>
+                                <h3>Data e horário</h3>
+
+                                <p>
+                                    <time
+                                        datetime="{{ event.event_datetime|date:'c' }}"
+                                    >
+                                        {{ event.event_datetime|date:"d/m/Y" }}
+                                        às
+                                        {{ event.event_datetime|date:"H:i" }}
+                                    </time>
+                                </p>
+                            </div>
+                        </article>
+
+                        <article class="event-information-card">
+                            <span
+                                class="event-information-card__icon"
+                                aria-hidden="true"
+                            >
+                                02
+                            </span>
+
+                            <div>
+                                <h3>Localização</h3>
+
+                                <p>
+                                    {{ event.address }}
+                                </p>
+
+                                <p>
+                                    {{ event.city }}/{{ event.state }}
+                                </p>
+                            </div>
+                        </article>
+
+                        <article class="event-information-card">
+                            <span
+                                class="event-information-card__icon"
+                                aria-hidden="true"
+                            >
+                                03
+                            </span>
+
+                            <div>
+                                <h3>Organização responsável</h3>
+
+                                <p>
+                                    {{ event.organization.name }}
+                                </p>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <section
+                    class="ticket-section"
+                    id="ingressos"
+                    aria-labelledby="ticket-section-title"
+                >
+                    <div class="section-heading">
+                        <p class="section-heading__eyebrow">
+                            Escolha sua experiência
+                        </p>
+
+                        <h2 id="ticket-section-title">
+                            Tipos de ingresso
+                        </h2>
+
+                        <p class="section-heading__description">
+                            Confira os lotes e os períodos de venda
+                            definidos pela organização.
+                        </p>
+                    </div>
+
+                    {% if ticket_offers %}
+                        <div class="ticket-offer-grid">
+                            {% for offer in ticket_offers %}
+                                <article
+                                    class="
+                                        ticket-offer
+                                        ticket-offer--{{ offer.sales_state }}
+                                    "
+                                >
+                                    <header class="ticket-offer__header">
+                                        <div>
+                                            <p class="ticket-offer__eyebrow">
+                                                Tipo de ingresso
+                                            </p>
+
+                                            <h3>
+                                                {{ offer.ticket_type.name }}
+                                            </h3>
+                                        </div>
+
+                                        <span
+                                            class="
+                                                ticket-offer__status
+                                                ticket-offer__status--{{ offer.sales_state }}
+                                            "
+                                        >
+                                            {{ offer.sales_state_label }}
+                                        </span>
+                                    </header>
+
+                                    {% if offer.ticket_type.description %}
+                                        <p class="ticket-offer__description">
+                                            {{ offer.ticket_type.description }}
+                                        </p>
+                                    {% endif %}
+
+                                    {% if offer.lot %}
+                                        <div class="ticket-offer__commercial">
+                                            <div class="ticket-offer__lot">
+                                                <span>Lote apresentado</span>
+
+                                                <strong>
+                                                    {{ offer.lot.name }}
+                                                </strong>
+                                            </div>
+
+                                            <div class="ticket-offer__price">
+                                                <span>Valor por participante</span>
+
+                                                <strong>
+                                                    {% if offer.lot.is_free %}
+                                                        Gratuito
+                                                    {% else %}
+                                                        R$
+                                                        {{ offer.lot.price|floatformat:2 }}
+                                                    {% endif %}
+                                                </strong>
+                                            </div>
+                                        </div>
+
+                                        <dl class="ticket-offer__period">
+                                            <div>
+                                                <dt>Início das vendas</dt>
+
+                                                <dd>
+                                                    <time
+                                                        datetime="{{ offer.lot.sales_start|date:'c' }}"
+                                                    >
+                                                        {{ offer.lot.sales_start|date:"d/m/Y" }}
+                                                        às
+                                                        {{ offer.lot.sales_start|date:"H:i" }}
+                                                    </time>
+                                                </dd>
+                                            </div>
+
+                                            <div>
+                                                <dt>Encerramento</dt>
+
+                                                <dd>
+                                                    <time
+                                                        datetime="{{ offer.lot.sales_end|date:'c' }}"
+                                                    >
+                                                        {{ offer.lot.sales_end|date:"d/m/Y" }}
+                                                        às
+                                                        {{ offer.lot.sales_end|date:"H:i" }}
+                                                    </time>
+                                                </dd>
+                                            </div>
+                                        </dl>
+
+                                        {% if offer.is_on_sale %}
+                                            <p class="ticket-offer__availability">
+                                                Disponível para inscrição
+                                            </p>
+                                        {% elif offer.sales_state == "scheduled" %}
+                                            <p class="ticket-offer__notice">
+                                                As inscrições serão liberadas
+                                                na data informada.
+                                            </p>
+                                        {% else %}
+                                            <p class="ticket-offer__notice">
+                                                Este período de venda não está
+                                                mais disponível.
+                                            </p>
+                                        {% endif %}
+                                    {% else %}
+                                        <div class="ticket-offer__empty">
+                                            Nenhum lote ativo para este tipo
+                                            de ingresso.
+                                        </div>
+                                    {% endif %}
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="ticket-section__empty">
+                            <h3>
+                                Inscrições temporariamente indisponíveis
+                            </h3>
+
+                            <p>
+                                A organização responsável ainda não possui
+                                lotes ativos para este evento.
+                            </p>
+                        </div>
+                    {% endif %}
+                </section>
+
+                <section
+                    class="event-organizer"
+                    aria-labelledby="event-organizer-title"
+                >
+                    <div>
+                        <p class="event-organizer__eyebrow">
+                            Evento realizado por
+                        </p>
+
+                        <h2 id="event-organizer-title">
+                            {{ event.organization.name }}
+                        </h2>
+                    </div>
+
+                    <a
+                        class="event-organizer__back-link"
+                        href="{% url 'core:home' %}#eventos"
+                    >
+                        Ver outros eventos
+                        <span aria-hidden="true">→</span>
+                    </a>
+                </section>
+            </article>
+        </div>
+    </div>
+{% endblock %}

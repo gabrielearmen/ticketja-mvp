@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    {{ page_title }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/events-dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section
+        class="dashboard-page"
+        aria-labelledby="event-form-title"
+    >
+        <div class="container event-form-container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        {{ organization.name }}
+                    </p>
+
+                    <h1 id="event-form-title">
+                        {{ page_title }}
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        O evento será salvo como rascunho.
+                    </p>
+                </div>
+
+                <a
+                    class="button button--secondary"
+                    href="{% url 'events:organizer-list' %}"
+                >
+                    Voltar aos eventos
+                </a>
+            </header>
+
+            <form
+                class="event-form"
+                method="post"
+                enctype="multipart/form-data"
+                novalidate
+            >
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div
+                        class="form-alert"
+                        role="alert"
+                    >
+                        {% for error in form.non_field_errors %}
+                            <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="event-form__section">
+                    <div class="event-form__section-heading">
+                        <span>01</span>
+
+                        <div>
+                            <h2>Informações principais</h2>
+                            <p>
+                                Dados utilizados para apresentar o evento.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="event-form__fields">
+                        {% for field in form %}
+                            <div
+                                class="
+                                    form-field
+                                    {% if field.name == 'summary' or field.name == 'address' or field.name == 'cover_image' %}
+                                        form-field--full
+                                    {% endif %}
+                                    {% if field.errors %}
+                                        form-field--error
+                                    {% endif %}
+                                "
+                            >
+                                <label for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+
+                                    {% if field.field.required %}
+                                        <span aria-hidden="true">*</span>
+                                    {% endif %}
+                                </label>
+
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                    <p class="form-field__help">
+                                        {{ field.help_text }}
+                                    </p>
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    <div
+                                        class="form-field__errors"
+                                        role="alert"
+                                    >
+                                        {% for error in field.errors %}
+                                            <p>{{ error }}</p>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="event-form__footer">
+                    <p>
+                        Campos marcados com
+                        <strong>*</strong> são obrigatórios.
+                    </p>
+
+                    <div class="event-form__actions">
+                        <a
+                            class="button button--secondary"
+                            href="{% url 'events:organizer-list' %}"
+                        >
+                            Cancelar
+                        </a>
+
+                        <button
+                            class="button button--primary"
+                            type="submit"
+                        >
+                            {{ submit_label }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </section>
+{% endblock %}

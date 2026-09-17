@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Inscrição — {{ event.title }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/components.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/checkout.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <div class="checkout-page">
+        <div class="container">
+            <nav
+                class="checkout-breadcrumb"
+                aria-label="Navegação estrutural"
+            >
+                <a href="{% url 'core:home' %}#eventos">
+                    Eventos
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <a
+                    href="{% url 'events:public-detail' event_id=event.id %}"
+                >
+                    {{ event.title|truncatechars:30 }}
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <span aria-current="page">
+                    Inscrição
+                </span>
+            </nav>
+
+            <div class="checkout-heading">
+                <p class="checkout-heading__eyebrow">
+                    Inicie sua inscrição
+                </p>
+
+                <h1>Escolha seu ingresso</h1>
+
+                <p>
+                    Selecione o ingresso e informe quantas pessoas
+                    serão inscritas. Os participantes serão preenchidos
+                    na próxima etapa.
+                </p>
+            </div>
+
+            <ol
+                class="checkout-steps"
+                aria-label="Etapas da inscrição"
+            >
+                <li
+                    class="
+                        checkout-steps__item
+                        checkout-steps__item--active
+                    "
+                    aria-current="step"
+                >
+                    <span>1</span>
+                    Ingressos
+                </li>
+
+                <li class="checkout-steps__item">
+                    <span>2</span>
+                    Participantes
+                </li>
+
+                <li class="checkout-steps__item">
+                    <span>3</span>
+                    Pagamento
+                </li>
+            </ol>
+
+            <div class="checkout-layout">
+                <section
+                    class="checkout-card"
+                    aria-labelledby="ticket-selection-title"
+                >
+                    <form
+                        class="checkout-form"
+                        method="post"
+                        novalidate
+                    >
+                        {% csrf_token %}
+                        {{ form.idempotency_key }}
+
+                        {% if form.non_field_errors %}
+                            <div
+                                class="checkout-alert checkout-alert--error"
+                                role="alert"
+                            >
+                                {% for error in form.non_field_errors %}
+                                    <p>{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        {% if form.idempotency_key.errors %}
+                            <div
+                                class="checkout-alert checkout-alert--error"
+                                role="alert"
+                            >
+                                {% for error in form.idempotency_key.errors %}
+                                    <p>
+                                        Não foi possível validar esta
+                                        tentativa: {{ error }}
+                                    </p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <fieldset class="ticket-selection">
+                            <legend id="ticket-selection-title">
+                                Ingressos disponíveis
+                            </legend>
+
+                            <p class="ticket-selection__hint">
+                                Escolha uma das opções abaixo.
+                            </p>
+
+                            {% if offers %}
+                                <div class="ticket-selection__options">
+                                    {% for offer in offers %}
+                                        {% with current_value=form.ticket_lot.value|stringformat:"s" lot_value=offer.ticket_lot.id|stringformat:"s" %}
+                                            <div
+                                                class="
+                                                    ticket-choice
+                                                    ticket-choice--{{ offer.status.value }}
+                                                    {% if not offer.is_available %}
+                                                        ticket-choice--disabled
+                                                    {% endif %}
+                                                "
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="{{ form.ticket_lot.html_name }}"
+                                                    value="{{ offer.ticket_lot.id }}"
+                                                    id="ticket-lot-{{ forloop.counter }}"
+                                                    {% if current_value == lot_value %}
+                                                        checked
+                                                    {% endif %}
+                                                    {% if not offer.is_available %}
+                                                        disabled
+                                                    {% else %}
+                                                        required
+                                                    {% endif %}
+                                                >
+
+                                                <label
+                                                    class="ticket-choice__content"
+                                                    for="ticket-lot-{{ forloop.counter }}"
+                                                >
+                                                    <span class="ticket-choice__top">
+                                                        <span>
+                                                            <span class="ticket-choice__eyebrow">
+                                                                {{ offer.ticket_lot.ticket_type.name }}
+                                                            </span>
+
+                                                            <strong class="ticket-choice__name">
+                                                                {{ offer.ticket_lot.name }}
+                                                            </strong>
+                                                        </span>
+
+                                                        <span
+                                                            class="
+                                                                ticket-choice__status
+                                                                ticket-choice__status--{{ offer.status.value }}
+                                                            "
+                                                        >
+                                                            {{ offer.status_label }}
+                                                        </span>
+                                                    </span>
+
+                                                    <span class="ticket-choice__details">
+                                                        <span>
+                                                            <small>
+                                                                Valor por participante
+                                                            </small>
+
+                                                            <strong class="ticket-choice__price">
+                                                                {% if offer.ticket_lot.is_free %}
+                                                                    Gratuito
+                                                                {% else %}
+                                                                    R$
+                                                                    {{ offer.ticket_lot.price|floatformat:2 }}
+                                                                {% endif %}
+                                                            </strong>
+                                                        </span>
+
+                                                        <span>
+                                                            <small>
+                                                                Disponibilidade
+                                                            </small>
+
+                                                            <strong>
+                                                                {% if offer.is_available %}
+                                                                    {{ offer.available_quantity }}
+                                                                    vaga{{ offer.available_quantity|pluralize }}
+                                                                {% elif offer.status.value == "esgotado" %}
+                                                                    Esgotado
+                                                                {% else %}
+                                                                    Indisponível agora
+                                                                {% endif %}
+                                                            </strong>
+                                                        </span>
+                                                    </span>
+
+                                                    <span class="ticket-choice__period">
+                                                        Vendas de
+
+                                                        <time
+                                                            datetime="{{ offer.ticket_lot.sales_start|date:'c' }}"
+                                                        >
+                                                            {{ offer.ticket_lot.sales_start|date:"d/m/Y H:i" }}
+                                                        </time>
+
+                                                        até
+
+                                                        <time
+                                                            datetime="{{ offer.ticket_lot.sales_end|date:'c' }}"
+                                                        >
+                                                            {{ offer.ticket_lot.sales_end|date:"d/m/Y H:i" }}
+                                                        </time>
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        {% endwith %}
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <div class="checkout-empty">
+                                    <h2>Nenhum ingresso disponível</h2>
+
+                                    <p>
+                                        A organização não possui lotes
+                                        ativos para este evento.
+                                    </p>
+                                </div>
+                            {% endif %}
+
+                            {% if form.ticket_lot.errors %}
+                                <div
+                                    class="checkout-field-errors"
+                                    role="alert"
+                                >
+                                    {% for error in form.ticket_lot.errors %}
+                                        <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </fieldset>
+
+                        <div class="checkout-field">
+                            <label for="{{ form.quantity.id_for_label }}">
+                                {{ form.quantity.label }}
+                            </label>
+
+                            <p class="checkout-field__hint">
+                                Será necessário informar uma pessoa
+                                para cada ingresso reservado.
+                            </p>
+
+                            {{ form.quantity }}
+
+                            {% if form.quantity.errors %}
+                                <div
+                                    class="checkout-field-errors"
+                                    role="alert"
+                                >
+                                    {% for error in form.quantity.errors %}
+                                        <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="checkout-form__footer">
+                            <p>
+                                A reserva de 15 minutos começa somente
+                                depois que você continuar.
+                            </p>
+
+                            <button
+                                class="button button--primary"
+                                type="submit"
+                                {% if not has_available_offer %}
+                                    disabled
+                                {% endif %}
+                            >
+                                Reservar e continuar
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <aside
+                    class="checkout-event-summary"
+                    aria-labelledby="checkout-event-title"
+                >
+                    <div class="checkout-event-summary__media">
+                        {% if event.cover_image %}
+                            <img
+                                src="{{ event.cover_image.url }}"
+                                alt=""
+                                width="480"
+                                height="300"
+                                loading="lazy"
+                                decoding="async"
+                            >
+                        {% else %}
+                            <div
+                                class="checkout-event-summary__placeholder"
+                                aria-hidden="true"
+                            >
+                                TicketJá
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="checkout-event-summary__content">
+                        <p>
+                            {{ event.get_sport_category_display }}
+                        </p>
+
+                        <h2 id="checkout-event-title">
+                            {{ event.title }}
+                        </h2>
+
+                        <dl>
+                            <div>
+                                <dt>Data</dt>
+                                <dd>
+                                    <time
+                                        datetime="{{ event.event_datetime|date:'c' }}"
+                                    >
+                                        {{ event.event_datetime|date:"d/m/Y" }}
+                                        às
+                                        {{ event.event_datetime|date:"H:i" }}
+                                    </time>
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt>Local</dt>
+                                <dd>
+                                    {{ event.city }}/{{ event.state }}
+                                </dd>
+                            </div>
+
+                            <div>
+                                <dt>Organização</dt>
+                                <dd>
+                                    {{ event.organization.name }}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <a
+                            href="{% url 'events:public-detail' event_id=event.id %}"
+                        >
+                            Voltar aos detalhes
+                        </a>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+{% endblock %}

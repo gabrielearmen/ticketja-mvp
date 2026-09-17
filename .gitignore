@@ -1,0 +1,35 @@
+# Ambiente virtual
+.venv/
+
+# Segredos e configurações locais
+.env
+.env.*
+!.env.example
+
+# Arquivos temporários do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bancos locais — são proibidos neste projeto
+*.sqlite3
+db.sqlite3
+
+# Testes e relatórios
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Arquivos coletados pelo Django
+staticfiles/
+media/
+
+# Logs
+*.log
+
+# Editores e sistema operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

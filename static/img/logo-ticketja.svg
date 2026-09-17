@@ -1,0 +1,57 @@
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 72 48"
+    fill="none"
+>
+    <title>Símbolo TicketJá</title>
+
+    <path
+        d="M4 14H18"
+        stroke="#F97316"
+        stroke-width="4"
+        stroke-linecap="round"
+    />
+
+    <path
+        d="M8 24H18"
+        stroke="#F97316"
+        stroke-width="4"
+        stroke-linecap="round"
+    />
+
+    <path
+        d="M4 34H18"
+        stroke="#F97316"
+        stroke-width="4"
+        stroke-linecap="round"
+    />
+
+    <path
+        d="
+            M25 7
+            H60
+            C60 11.42 63.58 15 68 15
+            V33
+            C63.58 33 60 36.58 60 41
+            H25
+            C25 36.58 21.42 33 17 33
+            V15
+            C21.42 15 25 11.42 25 7
+            Z
+        "
+        fill="#C2410C"
+    />
+
+    <path
+        d="M34 16L48 24L34 32V27H27V21H34V16Z"
+        fill="white"
+    />
+
+    <path
+        d="M55 11V37"
+        stroke="#FDBA74"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-dasharray="3 4"
+    />
+</svg>

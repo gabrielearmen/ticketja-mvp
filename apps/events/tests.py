@@ -1,0 +1,724 @@
+import shutil
+import tempfile
+from datetime import timedelta
+from io import BytesIO
+
+from PIL import Image
+
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
+
+from apps.organizations.models import (
+    MembershipRole,
+    Organization,
+    OrganizationMembership,
+    OrganizationStatus,
+)
+
+from .models import (
+    Event,
+    EventStatus,
+    SportCategory,
+    TicketLot,
+    TicketType,
+)
+
+
+TEST_MEDIA_ROOT = tempfile.mkdtemp(prefix="ticketja-test-media-")
+
+
+def create_test_cover(filename="capa.png"):
+    image_buffer = BytesIO()
+    image = Image.new("RGB", (20, 20), color=(249, 115, 22))
+    image.save(image_buffer, format="PNG")
+    image.close()
+    image_buffer.seek(0)
+
+    return SimpleUploadedFile(
+        name=filename,
+        content=image_buffer.read(),
+        content_type="image/png",
+    )
+
+
+@override_settings(MEDIA_ROOT=TEST_MEDIA_ROOT)
+class OrganizerEventFlowTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        user_model = get_user_model()
+        cls.password = "Senha-Segura!2026"
+
+        cls.organizer_a = user_model.objects.create_user(
+            email="organizador-a@example.com",
+            password=cls.password,
+            first_name="Organizador",
+            last_name="A",
+        )
+        cls.organizer_b = user_model.objects.create_user(
+            email="organizador-b@example.com",
+            password=cls.password,
+            first_name="Organizador",
+            last_name="B",
+        )
+        cls.buyer = user_model.objects.create_user(
+            email="comprador@example.com",
+            password=cls.password,
+            first_name="Comprador",
+        )
+
+        cls.organization_a = Organization.objects.create(
+            name="Organização A",
+            slug="organizacao-a",
+            status=OrganizationStatus.APPROVED,
+        )
+        cls.organization_b = Organization.objects.create(
+            name="Organização B",
+            slug="organizacao-b",
+            status=OrganizationStatus.APPROVED,
+        )
+
+        OrganizationMembership.objects.create(
+            organization=cls.organization_a,
+            user=cls.organizer_a,
+            role=MembershipRole.OWNER,
+            is_active=True,
+        )
+        OrganizationMembership.objects.create(
+            organization=cls.organization_b,
+            user=cls.organizer_b,
+            role=MembershipRole.OWNER,
+            is_active=True,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        shutil.rmtree(TEST_MEDIA_ROOT, ignore_errors=True)
+
+    def future_datetime(self, days=30):
+        return timezone.now() + timedelta(days=days)
+
+    def valid_event_data(self, **changes):
+        event_datetime = timezone.localtime(
+            self.future_datetime()
+        ).strftime("%Y-%m-%dT%H:%M")
+        data = {
+            "title": "Corrida TicketJá 10K",
+            "summary": "Uma experiência esportiva para corredores.",
+            "sport_category": SportCategory.RUNNING,
+            "event_datetime": event_datetime,
+            "city": "Fortaleza",
+            "state": "CE",
+            "address": "Avenida Beira Mar, 1000",
+            "capacity": 500,
+            "cover_image": create_test_cover(),
+        }
+        data.update(changes)
+        return data
+
+    def valid_ticket_type_data(self, **changes):
+        data = {
+            "name": "Ingresso 10 km",
+            "description": "Categoria para a prova de 10 km.",
+            "capacity": 100,
+            "is_active": "on",
+        }
+        data.update(changes)
+        return data
+
+    def valid_ticket_lot_data(
+        self,
+        *,
+        sales_start=None,
+        sales_end=None,
+        **changes,
+    ):
+        start = sales_start or timezone.now() + timedelta(days=1)
+        end = sales_end or timezone.now() + timedelta(days=5)
+        data = {
+            "name": "Primeiro lote",
+            "price": "80.00",
+            "quantity": 50,
+            "sales_start": timezone.localtime(start).strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "sales_end": timezone.localtime(end).strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "is_active": "on",
+        }
+        data.update(changes)
+        return data
+
+    def create_event(
+        self,
+        *,
+        organization=None,
+        title="Evento de teste",
+        status=EventStatus.DRAFT,
+        with_cover=False,
+        capacity=500,
+    ):
+        event_data = {
+            "organization": organization or self.organization_a,
+            "title": title,
+            "summary": "Descrição resumida do evento.",
+            "sport_category": SportCategory.RUNNING,
+            "event_datetime": self.future_datetime(),
+            "city": "Fortaleza",
+            "state": "CE",
+            "address": "Avenida Beira Mar, 1000",
+            "capacity": capacity,
+            "status": status,
+        }
+        if with_cover:
+            event_data["cover_image"] = create_test_cover(
+                filename=f"{title}.png"
+            )
+        return Event.objects.create(**event_data)
+
+    def create_ticket_type(
+        self,
+        *,
+        event,
+        name="Ingresso geral",
+        capacity=None,
+        is_active=True,
+    ):
+        return TicketType.objects.create(
+            event=event,
+            name=name,
+            description="Categoria criada para teste.",
+            capacity=(capacity if capacity is not None else event.capacity),
+            is_active=is_active,
+        )
+
+    def create_ticket_lot(
+        self,
+        *,
+        ticket_type,
+        name="Primeiro lote",
+        price="80.00",
+        quantity=None,
+        sales_start=None,
+        sales_end=None,
+        is_active=True,
+    ):
+        return TicketLot.objects.create(
+            ticket_type=ticket_type,
+            name=name,
+            price=price,
+            quantity=(
+                quantity
+                if quantity is not None
+                else ticket_type.capacity
+            ),
+            sales_start=(
+                sales_start
+                or timezone.now() + timedelta(days=1)
+            ),
+            sales_end=(
+                sales_end
+                or timezone.now() + timedelta(days=10)
+            ),
+            is_active=is_active,
+        )
+
+    def create_commercial_configuration(self, event):
+        ticket_type = self.create_ticket_type(event=event)
+        ticket_lot = self.create_ticket_lot(
+            ticket_type=ticket_type,
+            sales_start=timezone.now() - timedelta(hours=1),
+            sales_end=timezone.now() + timedelta(days=10),
+        )
+        return ticket_type, ticket_lot
+
+    def login_as_organizer_a(self):
+        self.client.force_login(self.organizer_a)
+
+    def test_unauthenticated_user_is_redirected_to_login(self):
+        response = self.client.get(reverse("events:organizer-list"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("accounts:login"), response.url)
+
+    def test_buyer_without_organization_receives_403(self):
+        self.client.force_login(self.buyer)
+        response = self.client.get(reverse("events:organizer-list"))
+        self.assertEqual(response.status_code, 403)
+        self.assertTemplateUsed(
+            response,
+            "organizations/no_access.html",
+        )
+
+    def test_organizer_navigation_is_visible_for_organizer(self):
+        self.login_as_organizer_a()
+        response = self.client.get(reverse("core:home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse("organizations:dashboard"),
+        )
+        self.assertContains(response, "Painel do organizador")
+
+    def test_organizer_navigation_is_hidden_from_buyer(self):
+        self.client.force_login(self.buyer)
+        response = self.client.get(reverse("core:home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Painel do organizador")
+
+    def test_event_list_only_shows_active_organization_events(self):
+        self.create_event(
+            organization=self.organization_a,
+            title="Evento exclusivo A",
+        )
+        self.create_event(
+            organization=self.organization_b,
+            title="Evento secreto B",
+        )
+        self.login_as_organizer_a()
+        response = self.client.get(reverse("events:organizer-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Evento exclusivo A")
+        self.assertNotContains(response, "Evento secreto B")
+
+    def test_organizer_can_create_event_as_draft(self):
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse("events:organizer-create"),
+            data=self.valid_event_data(),
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("events:organizer-list"),
+        )
+        event = Event.objects.get(title="Corrida TicketJá 10K")
+        self.assertEqual(event.organization, self.organization_a)
+        self.assertEqual(event.status, EventStatus.DRAFT)
+        self.assertTrue(event.cover_image)
+
+    def test_organizer_can_edit_own_draft(self):
+        event = self.create_event(title="Título anterior")
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:organizer-update",
+                kwargs={"event_id": event.id},
+            ),
+            data=self.valid_event_data(title="Título atualizado"),
+        )
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Título atualizado")
+        self.assertEqual(event.organization, self.organization_a)
+
+    def test_organizer_cannot_edit_another_organization_event(self):
+        foreign_event = self.create_event(
+            organization=self.organization_b,
+            title="Evento da Organização B",
+        )
+        self.login_as_organizer_a()
+        get_response = self.client.get(
+            reverse(
+                "events:organizer-update",
+                kwargs={"event_id": foreign_event.id},
+            )
+        )
+        post_response = self.client.post(
+            reverse(
+                "events:organizer-update",
+                kwargs={"event_id": foreign_event.id},
+            ),
+            data=self.valid_event_data(title="Tentativa de invasão"),
+        )
+        self.assertEqual(get_response.status_code, 404)
+        self.assertEqual(post_response.status_code, 404)
+        foreign_event.refresh_from_db()
+        self.assertEqual(foreign_event.title, "Evento da Organização B")
+
+    def test_organizer_cannot_publish_foreign_event(self):
+        foreign_event = self.create_event(
+            organization=self.organization_b,
+            title="Evento estrangeiro",
+            with_cover=True,
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": foreign_event.id},
+            )
+        )
+        self.assertEqual(response.status_code, 404)
+        foreign_event.refresh_from_db()
+        self.assertEqual(foreign_event.status, EventStatus.DRAFT)
+
+    def test_organizer_cannot_cancel_foreign_event(self):
+        foreign_event = self.create_event(
+            organization=self.organization_b,
+            title="Evento publicado da Organização B",
+            status=EventStatus.PUBLISHED,
+            with_cover=True,
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:organizer-cancel",
+                kwargs={"event_id": foreign_event.id},
+            )
+        )
+        self.assertEqual(response.status_code, 404)
+        foreign_event.refresh_from_db()
+        self.assertEqual(foreign_event.status, EventStatus.PUBLISHED)
+
+    def test_valid_status_transition_draft_publish_cancel(self):
+        event = self.create_event(
+            title="Evento com ciclo completo",
+            with_cover=True,
+        )
+        self.create_commercial_configuration(event)
+        self.login_as_organizer_a()
+        publish_response = self.client.post(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": event.id},
+            )
+        )
+        self.assertEqual(publish_response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.PUBLISHED)
+        cancel_response = self.client.post(
+            reverse(
+                "events:organizer-cancel",
+                kwargs={"event_id": event.id},
+            )
+        )
+        self.assertEqual(cancel_response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.CANCELED)
+
+    def test_publish_and_cancel_reject_get_requests(self):
+        event = self.create_event(with_cover=True)
+        self.login_as_organizer_a()
+        publish_response = self.client.get(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": event.id},
+            )
+        )
+        cancel_response = self.client.get(
+            reverse(
+                "events:organizer-cancel",
+                kwargs={"event_id": event.id},
+            )
+        )
+        self.assertEqual(publish_response.status_code, 405)
+        self.assertEqual(cancel_response.status_code, 405)
+
+    def test_published_event_cannot_be_edited(self):
+        event = self.create_event(
+            status=EventStatus.PUBLISHED,
+            with_cover=True,
+        )
+        self.login_as_organizer_a()
+        response = self.client.get(
+            reverse(
+                "events:organizer-update",
+                kwargs={"event_id": event.id},
+            )
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_home_only_displays_published_events(self):
+        self.create_event(
+            title="Evento em rascunho",
+            status=EventStatus.DRAFT,
+        )
+        self.create_event(
+            title="Evento disponível ao público",
+            status=EventStatus.PUBLISHED,
+            with_cover=True,
+        )
+        self.create_event(
+            title="Evento cancelado",
+            status=EventStatus.CANCELED,
+        )
+        response = self.client.get(reverse("core:home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Evento disponível ao público")
+        self.assertNotContains(response, "Evento em rascunho")
+        self.assertNotContains(response, "Evento cancelado")
+
+    def test_ticket_type_capacity_cannot_exceed_event_limit(self):
+        event = self.create_event(
+            title="Evento com limite de categorias",
+            capacity=100,
+        )
+        self.create_ticket_type(
+            event=event,
+            name="Categoria existente",
+            capacity=80,
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:ticket-type-create",
+                kwargs={"event_id": event.id},
+            ),
+            data=self.valid_ticket_type_data(
+                name="Categoria excedente",
+                capacity=30,
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Restam 20 vagas")
+        self.assertFalse(
+            TicketType.objects.filter(
+                event=event,
+                name="Categoria excedente",
+            ).exists()
+        )
+
+    def test_ticket_lot_quantity_cannot_exceed_type_capacity(self):
+        event = self.create_event(title="Evento com limite de lotes")
+        ticket_type = self.create_ticket_type(
+            event=event,
+            capacity=100,
+        )
+        self.create_ticket_lot(
+            ticket_type=ticket_type,
+            name="Lote existente",
+            quantity=60,
+            sales_start=timezone.now() + timedelta(days=1),
+            sales_end=timezone.now() + timedelta(days=5),
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:ticket-lot-create",
+                kwargs={
+                    "event_id": event.id,
+                    "ticket_type_id": ticket_type.id,
+                },
+            ),
+            data=self.valid_ticket_lot_data(
+                name="Lote excedente",
+                quantity=50,
+                sales_start=timezone.now() + timedelta(days=6),
+                sales_end=timezone.now() + timedelta(days=10),
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Restam 40 unidades")
+        self.assertFalse(
+            TicketLot.objects.filter(
+                ticket_type=ticket_type,
+                name="Lote excedente",
+            ).exists()
+        )
+
+    def test_active_ticket_lots_cannot_overlap(self):
+        event = self.create_event(title="Evento com períodos comerciais")
+        ticket_type = self.create_ticket_type(
+            event=event,
+            capacity=100,
+        )
+        self.create_ticket_lot(
+            ticket_type=ticket_type,
+            quantity=40,
+            sales_start=timezone.now() + timedelta(days=1),
+            sales_end=timezone.now() + timedelta(days=5),
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:ticket-lot-create",
+                kwargs={
+                    "event_id": event.id,
+                    "ticket_type_id": ticket_type.id,
+                },
+            ),
+            data=self.valid_ticket_lot_data(
+                name="Lote sobreposto",
+                quantity=40,
+                sales_start=timezone.now() + timedelta(days=4),
+                sales_end=timezone.now() + timedelta(days=8),
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "coincide com outro lote ativo")
+        self.assertFalse(
+            TicketLot.objects.filter(
+                ticket_type=ticket_type,
+                name="Lote sobreposto",
+            ).exists()
+        )
+
+    def test_organizer_cannot_manage_foreign_lots(self):
+        foreign_event = self.create_event(
+            organization=self.organization_b,
+            title="Evento comercial da Organização B",
+        )
+        foreign_type = self.create_ticket_type(
+            event=foreign_event,
+            name="Ingresso estrangeiro",
+        )
+        foreign_lot = self.create_ticket_lot(
+            ticket_type=foreign_type,
+            name="Lote estrangeiro",
+        )
+        self.login_as_organizer_a()
+        create_response = self.client.post(
+            reverse(
+                "events:ticket-lot-create",
+                kwargs={
+                    "event_id": foreign_event.id,
+                    "ticket_type_id": foreign_type.id,
+                },
+            ),
+            data=self.valid_ticket_lot_data(),
+        )
+        update_response = self.client.get(
+            reverse(
+                "events:ticket-lot-update",
+                kwargs={
+                    "event_id": foreign_event.id,
+                    "ticket_type_id": foreign_type.id,
+                    "ticket_lot_id": foreign_lot.id,
+                },
+            )
+        )
+        self.assertEqual(create_response.status_code, 404)
+        self.assertEqual(update_response.status_code, 404)
+
+    def test_event_cannot_publish_without_ticket_type(self):
+        event = self.create_event(
+            title="Evento sem ingresso",
+            with_cover=True,
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": event.id},
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.DRAFT)
+
+    def test_event_cannot_publish_without_active_lot(self):
+        event = self.create_event(title="Evento sem lote", with_cover=True)
+        self.create_ticket_type(event=event)
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": event.id},
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.DRAFT)
+
+    def test_inactive_lot_does_not_allow_publication(self):
+        event = self.create_event(
+            title="Evento com lote inativo",
+            with_cover=True,
+        )
+        ticket_type = self.create_ticket_type(event=event)
+        self.create_ticket_lot(
+            ticket_type=ticket_type,
+            is_active=False,
+        )
+        self.login_as_organizer_a()
+        self.client.post(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": event.id},
+            )
+        )
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.DRAFT)
+
+    def test_expired_lot_does_not_allow_publication(self):
+        event = self.create_event(
+            title="Evento com lote encerrado",
+            with_cover=True,
+        )
+        ticket_type = self.create_ticket_type(event=event)
+        self.create_ticket_lot(
+            ticket_type=ticket_type,
+            sales_start=timezone.now() - timedelta(days=10),
+            sales_end=timezone.now() - timedelta(days=1),
+        )
+        self.login_as_organizer_a()
+        self.client.post(
+            reverse(
+                "events:organizer-publish",
+                kwargs={"event_id": event.id},
+            )
+        )
+        event.refresh_from_db()
+        self.assertEqual(event.status, EventStatus.DRAFT)
+
+    def test_ticket_type_cannot_be_reduced_below_active_lots(self):
+        event = self.create_event(title="Evento com capacidade comprometida")
+        ticket_type = self.create_ticket_type(
+            event=event,
+            capacity=100,
+        )
+        self.create_ticket_lot(
+            ticket_type=ticket_type,
+            quantity=80,
+        )
+        self.login_as_organizer_a()
+        response = self.client.post(
+            reverse(
+                "events:ticket-type-update",
+                kwargs={
+                    "event_id": event.id,
+                    "ticket_type_id": ticket_type.id,
+                },
+            ),
+            data=self.valid_ticket_type_data(
+                name=ticket_type.name,
+                capacity=50,
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "quantidade já distribuída nos lotes ativos",
+        )
+        ticket_type.refresh_from_db()
+        self.assertEqual(ticket_type.capacity, 100)
+
+    def test_published_event_rejects_commercial_changes(self):
+        event = self.create_event(
+            title="Evento publicado e protegido",
+            status=EventStatus.PUBLISHED,
+            with_cover=True,
+        )
+        ticket_type = self.create_ticket_type(event=event)
+        self.login_as_organizer_a()
+        type_response = self.client.get(
+            reverse(
+                "events:ticket-type-create",
+                kwargs={"event_id": event.id},
+            )
+        )
+        lot_response = self.client.get(
+            reverse(
+                "events:ticket-lot-create",
+                kwargs={
+                    "event_id": event.id,
+                    "ticket_type_id": ticket_type.id,
+                },
+            )
+        )
+        self.assertEqual(type_response.status_code, 404)
+        self.assertEqual(lot_response.status_code, 404)

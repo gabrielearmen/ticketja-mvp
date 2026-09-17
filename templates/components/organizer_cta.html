@@ -1,0 +1,42 @@
+<aside
+    class="organizer-cta"
+    id="organizador"
+    aria-labelledby="organizer-cta-title"
+>
+    <div class="organizer-cta__content">
+        <p class="organizer-cta__eyebrow">
+            Para organizadores
+        </p>
+
+        <h2 id="organizer-cta-title">
+            Seja um organizador
+        </h2>
+
+        <p>
+            Crie, publique e opere seu evento com mais controle.
+        </p>
+    </div>
+
+    {% if navigation_organizer_membership %}
+        <a
+            class="button button--primary"
+            href="{% url 'organizations:dashboard' %}"
+        >
+            Acessar meu painel
+        </a>
+    {% elif request.user.is_authenticated %}
+        <a
+            class="button button--primary"
+            href="{% url 'accounts:dashboard' %}"
+        >
+            Consultar minha conta
+        </a>
+    {% else %}
+        <a
+            class="button button--primary"
+            href="{% url 'accounts:login' %}?next={% url 'accounts:dashboard' %}"
+        >
+            Entrar para organizar
+        </a>
+    {% endif %}
+</aside>

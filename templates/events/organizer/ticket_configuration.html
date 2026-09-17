@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}
+    Ingressos de {{ event.title }} — TicketJá
+{% endblock %}
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/events-dashboard.css' %}"
+    >
+{% endblock %}
+
+{% block content %}
+    <section
+        class="dashboard-page"
+        aria-labelledby="ticket-configuration-title"
+    >
+        <div class="container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        Ingressos e lotes
+                    </p>
+
+                    <h1 id="ticket-configuration-title">
+                        {{ event.title }}
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        Configure categorias, preços e períodos.
+                    </p>
+                </div>
+
+                <div class="dashboard-header__actions">
+                    <a
+                        class="button button--secondary"
+                        href="{% url 'events:organizer-list' %}"
+                    >
+                        Voltar aos eventos
+                    </a>
+
+                    {% if event.is_editable %}
+                        <a
+                            class="button button--primary"
+                            href="{% url 'events:ticket-type-create' event.id %}"
+                        >
+                            Criar tipo de ingresso
+                        </a>
+                    {% endif %}
+                </div>
+            </header>
+
+            <div class="capacity-summary">
+                <div>
+                    <span>Capacidade do evento</span>
+                    <strong>{{ event.capacity }}</strong>
+                </div>
+
+                {% if event.is_editable %}
+                    {% if commercial_configuration_ready %}
+                        <div class="commercial-readiness commercial-readiness--ready">
+                            <div>
+                                <strong>Configuração comercial pronta</strong>
+
+                                <p>
+                                    O evento possui tipos e lotes válidos para
+                                    publicação.
+                                </p>
+                            </div>
+
+                            <form
+                                method="post"
+                                action="{% url 'events:organizer-publish' event.id %}"
+                            >
+                                {% csrf_token %}
+
+                                <button
+                                    class="button button--primary"
+                                    type="submit"
+                                >
+                                    Publicar evento
+                                </button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <div class="commercial-readiness commercial-readiness--blocked">
+                            <div>
+                                <strong>Finalize a configuração comercial</strong>
+
+                                <p>
+                                    Corrija os itens abaixo antes de publicar.
+                                </p>
+                            </div>
+
+                            <ul>
+                                {% for error in configuration_errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                {% endif %}
+
+                <div>
+                    <span>Vagas distribuídas</span>
+                    <strong>{{ allocated_capacity }}</strong>
+                </div>
+
+                <div>
+                    <span>Vagas disponíveis</span>
+                    <strong>{{ available_capacity }}</strong>
+                </div>
+            </div>
+
+            {% if not event.is_editable %}
+                <div class="dashboard-notice">
+                    Este evento não está em rascunho. A configuração
+                    comercial está disponível somente para consulta.
+                </div>
+            {% endif %}
+
+            {% if ticket_types %}
+                <div class="ticket-type-list">
+                    {% for ticket_type in ticket_types %}
+                        <article class="ticket-type-card">
+                            <div class="ticket-type-card__heading">
+                                <div>
+                                    <p class="ticket-type-card__eyebrow">
+                                        Tipo de ingresso
+                                    </p>
+
+                                    <h2>{{ ticket_type.name }}</h2>
+                                </div>
+
+                                <span
+                                    class="
+                                        event-status
+                                        {% if ticket_type.is_active %}
+                                            event-status--publicado
+                                        {% else %}
+                                            event-status--cancelado
+                                        {% endif %}
+                                    "
+                                >
+                                    {% if ticket_type.is_active %}
+                                        Ativo
+                                    {% else %}
+                                        Inativo
+                                    {% endif %}
+                                </span>
+                            </div>
+
+                            {% if ticket_type.description %}
+                                <p class="ticket-type-card__description">
+                                    {{ ticket_type.description }}
+                                </p>
+                            {% endif %}
+
+                            <dl class="ticket-type-card__details">
+                                <div>
+                                    <dt>Capacidade</dt>
+                                    <dd>{{ ticket_type.capacity }}</dd>
+                                </div>
+
+                                <div>
+                                    <dt>Lotes</dt>
+                                    <dd>{{ ticket_type.lots.all|length }}</dd>
+                                </div>
+                            </dl>
+
+                            <div class="ticket-type-card__actions">
+                                {% if event.is_editable %}
+                                    <a
+                                        class="button button--secondary"
+                                        href="{% url 'events:ticket-type-update' event.id ticket_type.id %}"
+                                    >
+                                        Editar tipo
+                                    </a>
+
+                                    {% if ticket_type.is_active %}
+                                        <a
+                                            class="button button--primary"
+                                            href="{% url 'events:ticket-lot-create' event.id ticket_type.id %}"
+                                        >
+                                            Criar lote
+                                        </a>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+
+                            {% if ticket_type.lots.all %}
+                                <div class="ticket-lot-list">
+                                    {% for lot in ticket_type.lots.all %}
+                                        <div class="ticket-lot">
+                                            <div class="ticket-lot__heading">
+                                                <div>
+                                                    <h3>{{ lot.name }}</h3>
+
+                                                    <p>
+                                                        R$ {{ lot.price|floatformat:2 }}
+                                                    </p>
+                                                </div>
+
+                                                <span
+                                                    class="
+                                                        lot-status
+                                                        lot-status--{{ lot.sales_status }}
+                                                    "
+                                                >
+                                                    {{ lot.sales_status_label }}
+                                                </span>
+                                            </div>
+
+                                            <dl class="ticket-lot__details">
+                                                <div>
+                                                    <dt>Quantidade</dt>
+                                                    <dd>{{ lot.quantity }}</dd>
+                                                </div>
+
+                                                <div>
+                                                    <dt>Início</dt>
+                                                    <dd>
+                                                        {{ lot.sales_start|date:"d/m/Y H:i" }}
+                                                    </dd>
+                                                </div>
+
+                                                <div>
+                                                    <dt>Encerramento</dt>
+                                                    <dd>
+                                                        {{ lot.sales_end|date:"d/m/Y H:i" }}
+                                                    </dd>
+                                                </div>
+                                            </dl>
+
+                                            {% if event.is_editable %}
+                                                <a
+                                                    class="text-link"
+                                                    href="{% url 'events:ticket-lot-update' event.id ticket_type.id lot.id %}"
+                                                >
+                                                    Editar lote →
+                                                </a>
+                                            {% endif %}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% else %}
+                                <p class="ticket-type-card__empty">
+                                    Nenhum lote cadastrado para este tipo.
+                                </p>
+                            {% endif %}
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="dashboard-card dashboard-empty">
+                    <div class="dashboard-empty__content">
+                        <div
+                            class="dashboard-empty__icon"
+                            aria-hidden="true"
+                        >
+                            +
+                        </div>
+
+                        <h2>Nenhum tipo de ingresso</h2>
+
+                        <p>
+                            Crie uma categoria antes de configurar
+                            lotes e preços.
+                        </p>
+
+                        {% if event.is_editable %}
+                            <a
+                                class="button button--primary"
+                                href="{% url 'events:ticket-type-create' event.id %}"
+                            >
+                                Criar primeiro tipo
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+{% endblock %}

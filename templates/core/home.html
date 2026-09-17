@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    TicketJá — encontre seu próximo evento
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/components.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/home.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section class="discovery-hero" aria-labelledby="home-title">
+        <div class="container discovery-hero__content">
+            <p class="discovery-hero__eyebrow">
+                Viva o próximo desafio
+            </p>
+
+            <h1 id="home-title">
+                Encontre sua próxima prova.
+            </h1>
+
+            <p class="discovery-hero__description">
+                Descubra eventos esportivos e encontre a experiência
+                que combina com o seu próximo objetivo.
+            </p>
+
+            {% include "components/search_form.html" %}
+        </div>
+    </section>
+
+    {% if featured_events %}
+        <section
+            class="event-section event-section--featured"
+            aria-labelledby="featured-events-title"
+        >
+            <div class="container">
+                <div class="section-header">
+                    <div>
+                        <p class="section-header__eyebrow">
+                            Em destaque
+                        </p>
+
+                        <h2 id="featured-events-title">
+                            Eventos para colocar no calendário
+                        </h2>
+                    </div>
+                </div>
+
+                <div class="event-grid">
+                    {% for event in featured_events %}
+                        {% include "components/event_card.html" %}
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    {% endif %}
+
+    <section
+        class="event-section"
+        id="eventos"
+        aria-labelledby="upcoming-events-title"
+    >
+        <div class="container">
+            <div class="section-header">
+                <div>
+                    {% if search_query or location_query %}
+                        <p class="section-header__eyebrow">
+                            Resultado da busca
+                        </p>
+
+                        <h2 id="upcoming-events-title">
+                            Eventos encontrados
+                        </h2>
+                    {% else %}
+                        <p class="section-header__eyebrow">
+                            Explore
+                        </p>
+
+                        <h2 id="upcoming-events-title">
+                            Próximos eventos
+                        </h2>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if upcoming_events %}
+                <div class="event-grid">
+                    {% for event in upcoming_events %}
+                        {% include "components/event_card.html" %}
+                    {% endfor %}
+                </div>
+            {% else %}
+                {% include "components/empty_state.html" %}
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="organizer-section">
+        <div class="container">
+            {% include "components/organizer_cta.html" %}
+        </div>
+    </section>
+{% endblock %}

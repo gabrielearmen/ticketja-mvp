@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Criar conta — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/auth.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section class="auth-page" aria-labelledby="register-title">
+        <div class="container auth-layout">
+            <div class="auth-introduction">
+                <p class="auth-introduction__eyebrow">
+                    Comece sua jornada
+                </p>
+
+                <h1 id="register-title">
+                    Crie sua conta.
+                </h1>
+
+                <p>
+                    Uma conta permite acompanhar pedidos, inscrições,
+                    participantes e credenciais.
+                </p>
+            </div>
+
+            <div class="auth-card auth-card--wide">
+                <div class="auth-card__heading">
+                    <h2>Seus dados de acesso</h2>
+
+                    <p>
+                        Cada participante não precisa possuir uma conta.
+                    </p>
+                </div>
+
+                {% if form.non_field_errors %}
+                    <div class="form-alert form-alert--error" role="alert">
+                        {% for error in form.non_field_errors %}
+                            <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="auth-form" novalidate>
+                    {% csrf_token %}
+
+                    <div class="form-fields-row">
+                        <div class="form-field">
+                            <label for="{{ form.first_name.id_for_label }}">
+                                {{ form.first_name.label }}
+                            </label>
+
+                            {{ form.first_name }}
+
+                            {% for error in form.first_name.errors %}
+                                <p class="form-field__error">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-field">
+                            <label for="{{ form.last_name.id_for_label }}">
+                                {{ form.last_name.label }}
+                            </label>
+
+                            {{ form.last_name }}
+
+                            {% for error in form.last_name.errors %}
+                                <p class="form-field__error">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="{{ form.email.id_for_label }}">
+                            {{ form.email.label }}
+                        </label>
+
+                        {{ form.email }}
+
+                        {% for error in form.email.errors %}
+                            <p class="form-field__error">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-field">
+                        <label for="{{ form.password1.id_for_label }}">
+                            {{ form.password1.label }}
+                        </label>
+
+                        {{ form.password1 }}
+
+                        {% if form.password1.help_text %}
+                            <p class="form-field__help">
+                                {{ form.password1.help_text }}
+                            </p>
+                        {% endif %}
+
+                        {% for error in form.password1.errors %}
+                            <p class="form-field__error">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-field">
+                        <label for="{{ form.password2.id_for_label }}">
+                            {{ form.password2.label }}
+                        </label>
+
+                        {{ form.password2 }}
+
+                        {% for error in form.password2.errors %}
+                            <p class="form-field__error">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+
+                    <button
+                        class="button button--primary auth-form__submit"
+                        type="submit"
+                    >
+                        Criar conta
+                    </button>
+                </form>
+
+                <p class="auth-card__registration">
+                    Já possui uma conta?
+                    <a href="{% url 'accounts:login' %}">
+                        Entrar
+                    </a>
+                </p>
+            </div>
+        </div>
+    </section>
+{% endblock %}

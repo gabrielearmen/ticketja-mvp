@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Entrar — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/auth.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section class="auth-page" aria-labelledby="login-title">
+        <div class="container auth-layout">
+            <div class="auth-introduction">
+                <p class="auth-introduction__eyebrow">
+                    Sua jornada continua
+                </p>
+
+                <h1 id="login-title">
+                    Entre na sua conta.
+                </h1>
+
+                <p>
+                    Acompanhe suas inscrições, participantes,
+                    pagamentos e credenciais em um único lugar.
+                </p>
+
+                <ul class="auth-benefits" aria-label="Recursos da conta">
+                    <li>Pedidos e inscrições organizados</li>
+                    <li>Credenciais individuais</li>
+                    <li>Informações dos participantes</li>
+                </ul>
+            </div>
+
+            <div class="auth-card">
+                <div class="auth-card__heading">
+                    <h2>Boas-vindas</h2>
+
+                    <p>
+                        Informe seu e-mail e sua senha.
+                    </p>
+                </div>
+
+                {% if form.non_field_errors %}
+                    <div
+                        class="form-alert form-alert--error"
+                        role="alert"
+                    >
+                        {% for error in form.non_field_errors %}
+                            <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="auth-form" novalidate>
+                    {% csrf_token %}
+
+                    {% if next %}
+                        <input
+                            type="hidden"
+                            name="next"
+                            value="{{ next }}"
+                        >
+                    {% endif %}
+
+                    <div class="form-field">
+                        <label for="{{ form.username.id_for_label }}">
+                            {{ form.username.label }}
+                        </label>
+
+                        {{ form.username }}
+
+                        {% for error in form.username.errors %}
+                            <p class="form-field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-field">
+                        <div class="form-field__label-row">
+                            <label for="{{ form.password.id_for_label }}">
+                                {{ form.password.label }}
+                            </label>
+
+                            <span class="form-field__future-link">
+                                Esqueci minha senha
+                            </span>
+                        </div>
+
+                        {{ form.password }}
+
+                        {% for error in form.password.errors %}
+                            <p class="form-field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <button
+                        class="button button--primary auth-form__submit"
+                        type="submit"
+                    >
+                        Entrar
+                    </button>
+                </form>
+
+                <p class="auth-card__registration">
+                    Ainda não possui conta?
+                    <a href="{% url 'accounts:register' %}">
+                        Criar conta
+                    </a>
+                </p>
+            </div>
+        </div>
+    </section>
+{% endblock %}

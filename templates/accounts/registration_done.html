@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+    Confirme seu e-mail — TicketJá
+{% endblock %}
+
+
+{% block content %}
+    <section class="feedback-page">
+        <div class="container feedback-card">
+            <p class="feedback-card__eyebrow">
+                Falta pouco
+            </p>
+
+            <h1>Confirme seu e-mail</h1>
+
+            <p>
+                Enviamos um link de confirmação. No desenvolvimento,
+                esse link aparece no terminal onde o servidor está
+                sendo executado.
+            </p>
+
+            <a
+                class="button button--primary"
+                href="{% url 'accounts:login' %}"
+            >
+                Voltar para o login
+            </a>
+        </div>
+    </section>
+{% endblock %}

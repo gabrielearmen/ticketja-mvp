@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Acesso não autorizado — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section class="dashboard-page">
+        <div class="container">
+            <div class="access-denied">
+                <h1>Acesso não autorizado.</h1>
+
+                <p>
+                    Sua conta não possui um vínculo ativo com uma
+                    organização aprovada.
+                </p>
+
+                <a
+                    class="button button--primary"
+                    href="{% url 'accounts:dashboard' %}"
+                >
+                    Voltar para minha conta
+                </a>
+            </div>
+        </div>
+    </section>
+{% endblock %}

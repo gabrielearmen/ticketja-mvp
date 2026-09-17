@@ -1,0 +1,42 @@
+<form
+    class="event-search"
+    method="get"
+    action="{% url 'core:home' %}#eventos"
+    role="search"
+>
+    <div class="event-search__field event-search__field--query">
+        <label for="event-search-query">
+            Evento ou modalidade
+        </label>
+
+        <input
+            id="event-search-query"
+            name="q"
+            type="search"
+            value="{{ search_query }}"
+            placeholder="Nome do evento ou modalidade"
+            maxlength="100"
+            autocomplete="off"
+        >
+    </div>
+
+    <div class="event-search__field event-search__field--location">
+        <label for="event-search-location">
+            Localização
+        </label>
+
+        <input
+            id="event-search-location"
+            name="local"
+            type="search"
+            value="{{ location_query }}"
+            placeholder="Cidade ou estado"
+            maxlength="100"
+            autocomplete="address-level2"
+        >
+    </div>
+
+    <button class="button button--primary event-search__submit" type="submit">
+        Buscar eventos
+    </button>
+</form>

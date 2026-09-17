@@ -1,0 +1,11 @@
+Olá, {{ user.first_name }}.
+
+Recebemos uma solicitação de criação de conta no TicketJá.
+
+Confirme seu e-mail acessando o endereço abaixo:
+
+{{ activation_url }}
+
+Se você não solicitou esta conta, ignore esta mensagem.
+
+TicketJá

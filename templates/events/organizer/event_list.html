@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Eventos de {{ organization.name }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/events-dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section
+        class="dashboard-page"
+        aria-labelledby="event-list-title"
+    >
+        <div class="container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        Gestão de eventos
+                    </p>
+
+                    <h1 id="event-list-title">
+                        Seus eventos
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        Organização: {{ organization.name }}
+                    </p>
+                </div>
+
+                <div class="dashboard-header__actions">
+                    <a
+                        class="button button--secondary"
+                        href="{% url 'organizations:dashboard' %}"
+                    >
+                        Voltar ao painel
+                    </a>
+
+                    <a
+                        class="button button--primary"
+                        href="{% url 'events:organizer-create' %}"
+                    >
+                        Criar evento
+                    </a>
+                </div>
+            </header>
+
+            {% if events %}
+                <div class="organizer-event-list">
+                    {% for event in events %}
+                        <article class="organizer-event-card">
+                            <div class="organizer-event-card__media">
+                                {% if event.cover_image %}
+                                    <img
+                                        src="{{ event.cover_image.url }}"
+                                        alt=""
+                                        width="320"
+                                        height="200"
+                                        loading="lazy"
+                                        decoding="async"
+                                    >
+                                {% else %}
+                                    <div
+                                        class="organizer-event-card__placeholder"
+                                        aria-hidden="true"
+                                    >
+                                        TicketJá
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="organizer-event-card__content">
+                                <div class="organizer-event-card__heading">
+                                    <div>
+                                        <p class="organizer-event-card__sport">
+                                            {{ event.get_sport_category_display }}
+                                        </p>
+
+                                        <h2>{{ event.title }}</h2>
+                                    </div>
+
+                                    <span
+                                        class="
+                                            event-status
+                                            event-status--{{ event.status }}
+                                        "
+                                    >
+                                        {{ event.get_status_display }}
+                                    </span>
+                                </div>
+
+                                <dl class="organizer-event-card__details">
+                                    <div>
+                                        <dt>Data</dt>
+                                        <dd>
+                                            <time
+                                                datetime="{{ event.event_datetime|date:'c' }}"
+                                            >
+                                                {{ event.event_datetime|date:"d/m/Y \à\s H:i" }}
+                                            </time>
+                                        </dd>
+                                    </div>
+
+                                    <div>
+                                        <dt>Local</dt>
+                                        <dd>
+                                            {{ event.city }}/{{ event.state }}
+                                        </dd>
+                                    </div>
+
+                                    <div>
+                                        <dt>Capacidade</dt>
+                                        <dd>
+                                            {{ event.capacity }} participantes
+                                        </dd>
+                                    </div>
+                                </dl>
+
+                                <div class="organizer-event-card__actions">
+                                    <a
+                                        class="button button--secondary"
+                                         href="{% url 'events:ticket-configuration' event.id %}"
+                                    >
+                                        Ingressos e lotes
+                                    </a>
+                                    
+                                    {% if event.is_editable %}
+                                        <a
+                                            class="button button--secondary"
+                                            href="{% url 'events:organizer-update' event.id %}"
+                                        >
+                                            Editar
+                                        </a>
+
+                                        <form
+                                            method="post"
+                                            action="{% url 'events:organizer-publish' event.id %}"
+                                        >
+                                            {% csrf_token %}
+
+                                            <button
+                                                class="button button--primary"
+                                                type="submit"
+                                            >
+                                                Publicar
+                                            </button>
+                                        </form>
+                                    {% elif event.status == "publicado" %}
+                                        <form
+                                            method="post"
+                                            action="{% url 'events:organizer-cancel' event.id %}"
+                                        >
+                                            {% csrf_token %}
+
+                                            <button
+                                                class="button button--danger"
+                                                type="submit"
+                                            >
+                                                Cancelar evento
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <p class="organizer-event-card__closed">
+                                            Este evento não possui ações disponíveis.
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="dashboard-card dashboard-empty">
+                    <div class="dashboard-empty__content">
+                        <div
+                            class="dashboard-empty__icon"
+                            aria-hidden="true"
+                        >
+                            +
+                        </div>
+
+                        <h2>Nenhum evento criado</h2>
+
+                        <p>
+                            Crie o primeiro evento da organização.
+                            Ele será salvo inicialmente como rascunho.
+                        </p>
+
+                        <a
+                            class="button button--primary"
+                            href="{% url 'events:organizer-create' %}"
+                        >
+                            Criar primeiro evento
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+{% endblock %}

@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Pedido {{ order.public_code }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/components.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/checkout.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <div class="checkout-page">
+        <div class="container">
+            <nav
+                class="checkout-breadcrumb"
+                aria-label="Navegação estrutural"
+            >
+                <a href="{% url 'core:home' %}#eventos">
+                    Eventos
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <a
+                    href="{% url 'events:public-detail' event_id=order.event.id %}"
+                >
+                    {{ order.event.title|truncatechars:30 }}
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <span aria-current="page">
+                    {{ order.public_code }}
+                </span>
+            </nav>
+
+            <div class="checkout-heading">
+                <p class="checkout-heading__eyebrow">
+                    Reserva criada
+                </p>
+
+                <h1>Confira seu pedido</h1>
+
+                <p>
+                    Sua vaga foi reservada. Confira os dados antes
+                    de seguir para o preenchimento dos participantes.
+                </p>
+            </div>
+
+            <ol
+                class="checkout-steps"
+                aria-label="Etapas da inscrição"
+            >
+                <li class="checkout-steps__item checkout-steps__item--done">
+                    <span aria-hidden="true">✓</span>
+                    Ingressos
+                </li>
+
+                <li
+                    class="
+                        checkout-steps__item
+                        checkout-steps__item--active
+                    "
+                    aria-current="step"
+                >
+                    <span>2</span>
+                    Participantes
+                </li>
+
+                <li class="checkout-steps__item">
+                    <span>3</span>
+                    Pagamento
+                </li>
+            </ol>
+
+            <div class="checkout-layout checkout-layout--single">
+                <section class="checkout-card">
+                    <header class="order-summary__header">
+                        <div>
+                            <p class="order-summary__eyebrow">
+                                Código do pedido
+                            </p>
+
+                            <h2>{{ order.public_code }}</h2>
+                        </div>
+
+                        <span
+                            class="
+                                order-status
+                                order-status--{{ order.status }}
+                            "
+                        >
+                            {{ order.get_status_display }}
+                        </span>
+                    </header>
+
+                    {% if order.status == "aguardando_pagamento" %}
+                        <div
+                            class="reservation-timer"
+                            data-reservation-timer
+                            data-expires-at="{{ order.reservation_expires_at|date:'c' }}"
+                        >
+                            <div>
+                                <p>Tempo restante da reserva</p>
+
+                                <strong
+                                    data-reservation-timer-output
+                                    aria-hidden="true"
+                                >
+                                    Calculando…
+                                </strong>
+                            </div>
+
+                            <p>
+                                Reserva válida até
+
+                                <time
+                                    datetime="{{ order.reservation_expires_at|date:'c' }}"
+                                >
+                                    {{ order.reservation_expires_at|date:"d/m/Y" }}
+                                    às
+                                    {{ order.reservation_expires_at|date:"H:i" }}
+                                </time>
+                            </p>
+                        </div>
+                    {% elif order.status == "expirado" %}
+                        <div
+                            class="checkout-alert checkout-alert--error"
+                            role="status"
+                        >
+                            <p>
+                                Esta reserva expirou e as vagas foram
+                                liberadas.
+                            </p>
+                        </div>
+                    {% endif %}
+
+                    <div class="order-summary__event">
+                        <p>Evento</p>
+
+                        <h2>{{ order.event.title }}</h2>
+
+                        <span>
+                            {{ order.event.event_datetime|date:"d/m/Y" }}
+                            às
+                            {{ order.event.event_datetime|date:"H:i" }}
+                            ·
+                            {{ order.event.city }}/{{ order.event.state }}
+                        </span>
+                    </div>
+
+                    <div class="order-items">
+                        <h2>Ingressos reservados</h2>
+
+                        {% for item in order_items %}
+                            <article class="order-item">
+                                <div>
+                                    <p>
+                                        {{ item.ticket_type.name }}
+                                    </p>
+
+                                    <span>
+                                        {{ item.ticket_lot.name }}
+                                    </span>
+                                </div>
+
+                                <dl>
+                                    <div>
+                                        <dt>Quantidade</dt>
+                                        <dd>{{ item.quantity }}</dd>
+                                    </div>
+
+                                    <div>
+                                        <dt>Valor unitário</dt>
+                                        <dd>
+                                            {% if item.unit_price == 0 %}
+                                                Gratuito
+                                            {% else %}
+                                                R$
+                                                {{ item.unit_price|floatformat:2 }}
+                                            {% endif %}
+                                        </dd>
+                                    </div>
+
+                                    <div>
+                                        <dt>Subtotal</dt>
+                                        <dd>
+                                            R$
+                                            {{ item.subtotal|floatformat:2 }}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </article>
+                        {% endfor %}
+                    </div>
+
+                    <dl class="order-totals">
+                        <div>
+                            <dt>Subtotal</dt>
+                            <dd>
+                                R$ {{ order.subtotal|floatformat:2 }}
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt>Taxa de serviço</dt>
+                            <dd>
+                                R$ {{ order.service_fee|floatformat:2 }}
+                            </dd>
+                        </div>
+
+                        <div class="order-totals__total">
+                            <dt>Total</dt>
+                            <dd>
+                                R$ {{ order.total|floatformat:2 }}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    {% if order.status == "aguardando_pagamento" %}
+                        <div class="checkout-next-action">
+                            <button
+                                class="button button--primary"
+                                type="button"
+                                disabled
+                            >
+                                Continuar para participantes
+                            </button>
+
+                            <p>
+                                O cadastro dos participantes será
+                                habilitado na próxima etapa.
+                            </p>
+                        </div>
+                    {% elif order.status == "expirado" %}
+                        <div class="checkout-next-action">
+                            <a
+                                class="button button--primary"
+                                href="{% url 'orders:start' event_id=order.event.id %}"
+                            >
+                                Iniciar nova reserva
+                            </a>
+                        </div>
+                    {% endif %}
+                </section>
+
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    {% if order.status == "aguardando_pagamento" %}
+        <script
+            src="{% static 'js/checkout-timer.js' %}"
+            defer
+        ></script>
+    {% endif %}
+{% endblock %}

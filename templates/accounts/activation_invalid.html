@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+    Link inválido — TicketJá
+{% endblock %}
+
+
+{% block content %}
+    <section class="feedback-page">
+        <div class="container feedback-card">
+            <p class="feedback-card__eyebrow">
+                Não foi possível confirmar
+            </p>
+
+            <h1>Este link não é válido</h1>
+
+            <p>
+                O link pode estar incorreto, expirado ou já ter sido
+                utilizado.
+            </p>
+
+            <a
+                class="button button--primary"
+                href="{% url 'accounts:login' %}"
+            >
+                Ir para o login
+            </a>
+        </div>
+    </section>
+{% endblock %}

@@ -1,0 +1,27 @@
+<div class="empty-state" role="status">
+    <div class="empty-state__icon" aria-hidden="true">
+        <span></span>
+    </div>
+
+    <div class="empty-state__content">
+        {% if search_query or location_query %}
+            <h3>Nenhum evento encontrado</h3>
+
+            <p>
+                Tente remover algum filtro ou pesquisar por outro
+                evento, cidade ou modalidade.
+            </p>
+
+            <a class="text-link" href="{% url 'core:home' %}#eventos">
+                Limpar pesquisa
+            </a>
+        {% else %}
+            <h3>Novos eventos aparecerão aqui</h3>
+
+            <p>
+                Ainda não existem eventos publicados e disponíveis
+                para inscrição.
+            </p>
+        {% endif %}
+    </div>
+</div>

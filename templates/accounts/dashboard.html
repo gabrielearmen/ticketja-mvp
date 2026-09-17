@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Minha conta — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section class="dashboard-page" aria-labelledby="account-title">
+        <div class="container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        Área do comprador
+                    </p>
+
+                    <h1 id="account-title">
+                        Olá, {{ request.user.first_name|default:"participante" }}.
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        Acompanhe suas compras e inscrições.
+                    </p>
+                </div>
+
+                <a
+                    class="button button--primary"
+                    href="{% url 'core:home' %}#eventos"
+                >
+                    Explorar eventos
+                </a>
+            </header>
+
+            <div class="dashboard-grid">
+                <section class="dashboard-card dashboard-card--main">
+                    <h2>Meus pedidos</h2>
+
+                    {% if orders %}
+                        <div>
+                            {% for order in orders %}
+                                <p>{{ order }}</p>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="dashboard-empty">
+                            <div class="dashboard-empty__content">
+                                <div
+                                    class="dashboard-empty__icon"
+                                    aria-hidden="true"
+                                >
+                                    →
+                                </div>
+
+                                <h3>Você ainda não possui pedidos</h3>
+
+                                <p>
+                                    Quando uma compra for realizada,
+                                    ela aparecerá nesta área.
+                                </p>
+
+                                <a
+                                    class="button button--primary"
+                                    href="{% url 'core:home' %}#eventos"
+                                >
+                                    Encontrar eventos
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+                </section>
+
+                <aside class="dashboard-card">
+                    <h2>Minha conta</h2>
+
+                    <dl class="dashboard-profile">
+                        <div>
+                            <dt>Nome</dt>
+                            <dd>
+                                {{ request.user.get_full_name|default:"Não informado" }}
+                            </dd>
+                        </div>
+
+                        <div>
+                            <dt>E-mail</dt>
+                            <dd>{{ request.user.email }}</dd>
+                        </div>
+
+                        <div>
+                            <dt>Situação</dt>
+                            <dd>Conta ativa</dd>
+                        </div>
+                    </dl>
+
+                    {% if organizer_membership %}
+                        <p class="dashboard-notice">
+                            Você também administra
+                            {{ organizer_membership.organization.name }}.
+                        </p>
+
+                        <a
+                            class="button button--header-secondary"
+                            href="{% url 'organizations:dashboard' %}"
+                        >
+                            Acessar painel do organizador
+                        </a>
+                    {% endif %}
+                </aside>
+            </div>
+        </div>
+    </section>
+{% endblock %}

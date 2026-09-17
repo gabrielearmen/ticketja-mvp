@@ -1,0 +1,165 @@
+{% load static %}
+
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <meta
+        name="description"
+        content="TicketJá — inscrições e experiências para eventos esportivos."
+    >
+
+    <title>{% block title %}TicketJá{% endblock %}</title>
+
+    <link
+        rel="icon"
+        href="{% static 'img/favicon.svg' %}"
+        type="image/svg+xml"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/base.css' %}"
+    >
+
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+    <a class="skip-link" href="#conteudo-principal">
+        Pular para o conteúdo principal
+    </a>
+
+    <header class="site-header">
+        <div class="container site-header__content">
+            <a
+                class="brand"
+                href="{% url 'core:home' %}"
+                aria-label="TicketJá, página inicial"
+            >
+                <img
+                    class="brand__symbol"
+                    src="{% static 'img/logo-ticketja.svg' %}"
+                    alt=""
+                    width="72"
+                    height="48"
+                >
+
+                <span class="brand__name">
+                    Ticket<span class="brand__accent">Já</span>
+                </span>
+            </a>
+
+            <nav
+                class="primary-navigation"
+                aria-label="Navegação principal"
+            >
+                <a
+                    class="
+                        primary-navigation__link
+                        primary-navigation__link--public
+                    "
+                    href="{% url 'core:home' %}#eventos"
+                >
+                    Eventos
+                </a>
+
+                <a
+                    class="
+                        primary-navigation__link
+                        primary-navigation__link--public
+                    "
+                    href="{% url 'core:home' %}#organizador"
+                >
+                    Crie seu evento
+                </a>
+
+                {% if request.user.is_authenticated %}
+                    {% if navigation_organizer_membership %}
+                        <a
+                            class="
+                                primary-navigation__link
+                                primary-navigation__link--organizer
+                            "
+                            href="{% url 'organizations:dashboard' %}"
+                        >
+                            Painel do organizador
+                        </a>
+                    {% endif %}
+
+                    <a
+                        class="primary-navigation__link"
+                        href="{% url 'accounts:dashboard' %}"
+                    >
+                        Minha conta
+                    </a>
+
+                    <form
+                        class="session-action"
+                        method="post"
+                        action="{% url 'accounts:logout' %}"
+                    >
+                        {% csrf_token %}
+
+                        <button
+                            class="button button--header-secondary"
+                            type="submit"
+                        >
+                            Sair
+                        </button>
+                    </form>
+                {% else %}
+                    <a
+                        class="button button--primary"
+                        href="{% url 'accounts:login' %}"
+                    >
+                        Entrar
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    {% if messages %}
+        <div
+            class="global-messages"
+            aria-live="polite"
+            aria-atomic="true"
+        >
+            <div class="container">
+                {% for message in messages %}
+                    <div
+                        class="
+                            global-message
+                            global-message--{{ message.tags|default:'info' }}
+                        "
+                        role="status"
+                    >
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <main id="conteudo-principal" tabindex="-1">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="container site-footer__content">
+            <p>
+                © {% now "Y" %} TicketJá.
+            </p>
+
+            <p>
+                Eventos que movimentam pessoas.
+            </p>
+        </div>
+       </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

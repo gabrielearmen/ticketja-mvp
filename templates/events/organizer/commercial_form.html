@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    {{ page_title }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/events-dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section
+        class="dashboard-page"
+        aria-labelledby="commercial-form-title"
+    >
+        <div class="container event-form-container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        {{ event.title }}
+                    </p>
+
+                    <h1 id="commercial-form-title">
+                        {{ page_title }}
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        Organização: {{ organization.name }}
+                    </p>
+                </div>
+
+                <a
+                    class="button button--secondary"
+                    href="{% url 'events:ticket-configuration' event.id %}"
+                >
+                    Voltar aos ingressos
+                </a>
+            </header>
+
+            <form
+                class="event-form"
+                method="post"
+                novalidate
+            >
+                {% csrf_token %}
+
+                <div class="event-form__section">
+                    {% if form.non_field_errors %}
+                        <div class="form-alert" role="alert">
+                            {% for error in form.non_field_errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="event-form__fields">
+                        {% for field in form %}
+                            <div
+                                class="
+                                    form-field
+                                    {% if field.name == 'description' %}
+                                        form-field--full
+                                    {% endif %}
+                                    {% if field.errors %}
+                                        form-field--error
+                                    {% endif %}
+                                "
+                            >
+                                {% if field.name == "is_active" %}
+                                    <label class="checkbox-field">
+                                        {{ field }}
+
+                                        <span>{{ field.label }}</span>
+                                    </label>
+                                {% else %}
+                                    <label for="{{ field.id_for_label }}">
+                                        {{ field.label }}
+
+                                        {% if field.field.required %}
+                                            <span aria-hidden="true">*</span>
+                                        {% endif %}
+                                    </label>
+
+                                    {{ field }}
+                                {% endif %}
+
+                                {% if field.help_text %}
+                                    <p class="form-field__help">
+                                        {{ field.help_text }}
+                                    </p>
+                                {% endif %}
+
+                                {% if field.errors %}
+                                    <div
+                                        class="form-field__errors"
+                                        role="alert"
+                                    >
+                                        {% for error in field.errors %}
+                                            <p>{{ error }}</p>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="event-form__footer">
+                    <p>
+                        {{ footer_note|default:"Os limites comerciais serão validados pelo sistema." }}
+                    </p>
+
+                    <div class="event-form__actions">
+                        <a
+                            class="button button--secondary"
+                            href="{% url 'events:ticket-configuration' event.id %}"
+                        >
+                            Cancelar
+                        </a>
+
+                        <button
+                            class="button button--primary"
+                            type="submit"
+                        >
+                            {{ submit_label }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </section>
+{% endblock %}
