@@ -169,6 +169,8 @@ LOCAL_APPS = [
     "apps.organizations.apps.OrganizationsConfig",
     "apps.events.apps.EventsConfig",
     "apps.orders.apps.OrdersConfig",
+    "apps.registrations.apps.RegistrationsConfig",
+
 ]
 
 
