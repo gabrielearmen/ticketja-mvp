@@ -17,26 +17,47 @@ class CloudinaryMediaStorage(Storage):
     """
     Armazena imagens enviadas pelos usuários no Cloudinary.
 
-    O banco de dados guarda apenas o identificador público da
-    imagem. O conteúdo do arquivo permanece no armazenamento
-    persistente do Cloudinary.
+    O banco guarda um nome virtual com extensão para manter
+    compatibilidade com os validadores do Django. O Cloudinary
+    continua recebendo somente o public_id real.
     """
 
     resource_type = "image"
     root_folder = "ticketja"
 
+    supported_formats = {
+        "jpg",
+        "jpeg",
+        "png",
+        "webp",
+    }
+
     def get_available_name(self, name, max_length=None):
-        """
-        O identificador final será gerado com UUID no momento
-        do upload, evitando colisões entre arquivos.
-        """
         return name
 
+    def _cloudinary_reference(self, name):
+        """
+        Separa o public_id real da extensão virtual armazenada
+        pelo Django.
+
+        Exemplo:
+        ticketja/events/covers/abc.png
+        retorna:
+        ("ticketja/events/covers/abc", "png")
+        """
+        normalized_name = str(name).replace("\\", "/")
+        stored_path = PurePosixPath(normalized_name)
+        image_format = stored_path.suffix.lower().lstrip(".")
+
+        if image_format in self.supported_formats:
+            public_id = str(stored_path.with_suffix(""))
+            return public_id, image_format
+
+        # Compatibilidade com imagens armazenadas anteriormente
+        # sem extensão.
+        return normalized_name, None
+
     def _save(self, name, content):
-        """
-        Envia o arquivo ao Cloudinary e devolve o identificador
-        que será armazenado no ImageField.
-        """
         original_path = PurePosixPath(
             str(name).replace("\\", "/")
         )
@@ -63,14 +84,25 @@ class CloudinaryMediaStorage(Storage):
             overwrite=False,
         )
 
-        return upload_result["public_id"]
+        public_id = upload_result["public_id"]
+        image_format = upload_result.get("format", "").lower()
+
+        if image_format not in self.supported_formats:
+            image_format = (
+                original_path.suffix.lower().lstrip(".")
+            )
+
+        if image_format not in self.supported_formats:
+            raise ValueError(
+                "O Cloudinary não informou um formato de "
+                "imagem permitido."
+            )
+
+        # A extensão é preservada para os validadores do Django.
+        # Ela não faz parte do public_id real do Cloudinary.
+        return f"{public_id}.{image_format}"
 
     def _open(self, name, mode="rb"):
-        """
-        Permite que o Django abra uma imagem já armazenada.
-
-        A URL é sempre gerada pelo próprio Cloudinary.
-        """
         if mode not in {"r", "rb"}:
             raise ValueError(
                 "O armazenamento do Cloudinary permite "
@@ -86,29 +118,26 @@ class CloudinaryMediaStorage(Storage):
         )
 
     def delete(self, name):
-        """
-        Remove a imagem do Cloudinary quando uma exclusão
-        explícita for solicitada.
-        """
         if not name:
             return
 
+        public_id, _ = self._cloudinary_reference(name)
+
         cloudinary.uploader.destroy(
-            name,
+            public_id,
             resource_type=self.resource_type,
             invalidate=True,
         )
 
     def exists(self, name):
-        """
-        Consulta se o identificador existe no Cloudinary.
-        """
         if not name:
             return False
 
+        public_id, _ = self._cloudinary_reference(name)
+
         try:
             cloudinary.api.resource(
-                name,
+                public_id,
                 resource_type=self.resource_type,
             )
         except NotFound:
@@ -117,24 +146,32 @@ class CloudinaryMediaStorage(Storage):
         return True
 
     def size(self, name):
-        """
-        Retorna o tamanho original da imagem em bytes.
-        """
+        public_id, _ = self._cloudinary_reference(name)
+
         resource = cloudinary.api.resource(
-            name,
+            public_id,
             resource_type=self.resource_type,
         )
+
         return resource["bytes"]
 
     def url(self, name):
-        """
-        Gera uma URL pública segura utilizando HTTPS.
-        """
         if not name:
             raise ValueError(
                 "Não é possível gerar a URL de uma imagem vazia."
             )
 
-        return cloudinary.CloudinaryImage(name).build_url(
-            secure=True,
+        public_id, image_format = (
+            self._cloudinary_reference(name)
         )
+
+        options = {
+            "secure": True,
+        }
+
+        if image_format:
+            options["format"] = image_format
+
+        return cloudinary.CloudinaryImage(
+            public_id
+        ).build_url(**options)
