@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Participantes — {{ order.public_code }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/components.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/checkout.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/participants.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <div class="checkout-page">
+        <div class="container participants-container">
+            <nav
+                class="checkout-breadcrumb"
+                aria-label="Navegação estrutural"
+            >
+                <a href="{% url 'core:home' %}#eventos">
+                    Eventos
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <a
+                    href="{% url 'orders:checkout-detail' public_code=order.public_code %}"
+                >
+                    {{ order.public_code }}
+                </a>
+
+                <span aria-hidden="true">/</span>
+
+                <span aria-current="page">
+                    Participantes
+                </span>
+            </nav>
+
+            <header class="checkout-heading">
+                <p class="checkout-heading__eyebrow">
+                    Dados da inscrição
+                </p>
+
+                <h1>Quem vai participar?</h1>
+
+                <p>
+                    Preencha uma pessoa para cada ingresso reservado.
+                    O comprador não precisa ser um dos participantes.
+                </p>
+            </header>
+
+            <ol
+                class="checkout-steps"
+                aria-label="Etapas da inscrição"
+            >
+                <li
+                    class="
+                        checkout-steps__item
+                        checkout-steps__item--done
+                    "
+                >
+                    <span aria-hidden="true">✓</span>
+                    Ingressos
+                </li>
+
+                <li
+                    class="
+                        checkout-steps__item
+                        checkout-steps__item--active
+                    "
+                    aria-current="step"
+                >
+                    <span>2</span>
+                    Participantes
+                </li>
+
+                <li class="checkout-steps__item">
+                    <span>3</span>
+                    Pagamento
+                </li>
+            </ol>
+
+            <div
+                class="reservation-timer"
+                data-reservation-timer
+                data-expires-at="{{ order.reservation_expires_at|date:'c' }}"
+            >
+                <div>
+                    <p>Tempo restante da reserva</p>
+
+                    <strong
+                        data-reservation-timer-output
+                        aria-hidden="true"
+                    >
+                        Calculando…
+                    </strong>
+                </div>
+
+                <p>
+                    Complete os participantes antes do encerramento
+                    da reserva.
+                </p>
+            </div>
+
+            {% if service_errors %}
+                <div
+                    class="checkout-alert checkout-alert--error"
+                    role="alert"
+                >
+                    {% for error in service_errors %}
+                        <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {% if formset.non_form_errors %}
+                <div
+                    class="checkout-alert checkout-alert--error"
+                    role="alert"
+                >
+                    {% for error in formset.non_form_errors %}
+                        <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {% if all_completed %}
+                <div
+                    class="participants-success"
+                    role="status"
+                >
+                    <strong>Dados dos participantes completos</strong>
+
+                    <p>
+                        Você ainda pode revisá-los enquanto a
+                        reserva estiver ativa.
+                    </p>
+                </div>
+            {% endif %}
+
+            <form
+                method="post"
+                class="participants-form"
+                novalidate
+            >
+                {% csrf_token %}
+                {{ formset.management_form }}
+
+                <div class="participants-list">
+                    {% for form in formset %}
+                        <article class="participant-card">
+                            {% for hidden_field in form.hidden_fields %}
+                                {{ hidden_field }}
+                            {% endfor %}
+
+                            <header class="participant-card__header">
+                                <div>
+                                    <p>
+                                        Participante
+                                        {{ forloop.counter }}
+                                    </p>
+
+                                    <h2>
+                                        {{ form.instance.order_item.ticket_type.name }}
+                                    </h2>
+                                </div>
+
+                                <span>
+                                    {{ form.instance.order_item.ticket_lot.name }}
+                                </span>
+                            </header>
+
+                            {% if form.non_field_errors %}
+                                <div
+                                    class="checkout-alert checkout-alert--error"
+                                    role="alert"
+                                >
+                                    {% for error in form.non_field_errors %}
+                                        <p>{{ error }}</p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="participant-fields">
+                                {% for field in form.visible_fields %}
+                                    <div
+                                        class="
+                                            participant-field
+                                            {% if field.name == 'full_name' or field.name == 'email' %}
+                                                participant-field--wide
+                                            {% endif %}
+                                            {% if field.errors %}
+                                                participant-field--error
+                                            {% endif %}
+                                        "
+                                    >
+                                        <label
+                                            for="{{ field.id_for_label }}"
+                                        >
+                                            {{ field.label }}
+
+                                            {% if field.field.required %}
+                                                <span aria-hidden="true">*</span>
+                                            {% endif %}
+                                        </label>
+
+                                        {{ field }}
+
+                                        {% if field.help_text %}
+                                            <p class="participant-field__help">
+                                                {{ field.help_text }}
+                                            </p>
+                                        {% endif %}
+
+                                        {% if field.errors %}
+                                            <div
+                                                class="participant-field__errors"
+                                                role="alert"
+                                            >
+                                                {% for error in field.errors %}
+                                                    <p>{{ error }}</p>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+
+                <footer class="participants-form__footer">
+                    <a
+                        class="button button--secondary"
+                        href="{% url 'orders:checkout-detail' public_code=order.public_code %}"
+                    >
+                        Voltar ao pedido
+                    </a>
+
+                    <div>
+                        <p>
+                            Os campos marcados com
+                            <strong>*</strong> são obrigatórios.
+                        </p>
+
+                        <button
+                            class="button button--primary"
+                            type="submit"
+                        >
+                            Salvar participantes
+                        </button>
+                    </div>
+                </footer>
+            </form>
+
+            {% if all_completed %}
+                <div class="checkout-next-action">
+                    <button
+                        class="button button--primary"
+                        type="button"
+                        disabled
+                    >
+                        Continuar para pagamento
+                    </button>
+
+                    <p>
+                        O pagamento será habilitado na próxima fase.
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
+
+
+{% block extra_js %}
+    <script
+        src="{% static 'js/checkout-timer.js' %}"
+        defer
+    ></script>
+{% endblock %}

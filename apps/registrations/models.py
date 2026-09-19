@@ -4,6 +4,11 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
+from .validators import (
+    normalize_and_validate_phone,
+    normalize_document_number,
+    validate_cpf,
+)
 
 class DocumentType(models.TextChoices):
     CPF = "cpf", "CPF"
@@ -162,11 +167,16 @@ class Registration(models.Model):
             self.full_name.split()
         )
 
-        self.document_number = (
-            self.document_number.strip().upper()
+        self.document_number = normalize_document_number(
+            document_type=self.document_type,
+            document_number=self.document_number,
         )
 
         self.email = self.email.strip().lower()
+
+        self.emergency_contact_name = " ".join(
+            self.emergency_contact_name.split()
+        )
 
         if (
             self.birth_date is not None
@@ -176,6 +186,55 @@ class Registration(models.Model):
                 "A data de nascimento deve ser anterior "
                 "à data atual."
             )
+
+        if (
+            self.document_type == DocumentType.CPF
+            and self.document_number
+        ):
+            try:
+                self.document_number = validate_cpf(
+                    self.document_number
+                )
+            except ValidationError as error:
+                errors["document_number"] = error.messages
+
+        try:
+            self.phone = normalize_and_validate_phone(
+                self.phone
+            )
+        except ValidationError as error:
+            errors["phone"] = error.messages
+
+        try:
+            self.emergency_contact_phone = (
+                normalize_and_validate_phone(
+                    self.emergency_contact_phone
+                )
+            )
+        except ValidationError as error:
+            errors["emergency_contact_phone"] = (
+                error.messages
+            )
+
+        emergency_name_present = bool(
+            self.emergency_contact_name
+        )
+
+        emergency_phone_present = bool(
+            self.emergency_contact_phone
+        )
+
+        if (
+            emergency_name_present
+            != emergency_phone_present
+        ):
+            message = (
+                "Preencha o nome e o telefone do contato "
+                "de emergência ou deixe ambos vazios."
+            )
+
+            errors["emergency_contact_name"] = message
+            errors["emergency_contact_phone"] = message
 
         if self.completed_at is not None:
             required_fields = {

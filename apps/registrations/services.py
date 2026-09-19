@@ -294,3 +294,163 @@ def ensure_registration_slots(
         registrations=registrations,
         created_count=len(missing_registrations),
     )
+
+PARTICIPANT_DATA_FIELDS = (
+    "full_name",
+    "document_type",
+    "document_number",
+    "birth_date",
+    "email",
+    "phone",
+    "emergency_contact_name",
+    "emergency_contact_phone",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class RegistrationUpdateResult:
+    order: Order
+    registrations: tuple[Registration, ...]
+
+
+@transaction.atomic
+def update_registration_participants(
+    *,
+    order_id,
+    buyer,
+    participants_data,
+    at=None,
+):
+    """
+    Atualiza todos os participantes de um pedido atomicamente.
+
+    O navegador deve enviar exatamente as inscrições pertencentes
+    ao pedido. Se uma delas estiver ausente, duplicada ou for de
+    outro pedido, nenhuma alteração será salva.
+    """
+    reference_time = at or timezone.now()
+
+    slots_result = ensure_registration_slots(
+        order_id=order_id,
+        buyer=buyer,
+        at=reference_time,
+    )
+
+    order = slots_result.order
+
+    registrations = list(
+        Registration.objects
+        .select_for_update()
+        .filter(
+            order_item__order=order,
+        )
+        .select_related(
+            "order_item",
+            "order_item__order",
+        )
+        .order_by(
+            "order_item__created_at",
+            "position",
+        )
+    )
+
+    registrations_by_id = {
+        registration.id: registration
+        for registration in registrations
+    }
+
+    submitted_data = list(participants_data)
+
+    submitted_by_id = {}
+
+    for participant_data in submitted_data:
+        if not isinstance(participant_data, dict):
+            raise ValidationError(
+                {
+                    "participants": (
+                        "Os dados dos participantes são "
+                        "inválidos."
+                    )
+                }
+            )
+
+        registration_id = _normalize_uuid(
+            value=participant_data.get(
+                "registration_id"
+            ),
+            field_name="participants",
+        )
+
+        if registration_id in submitted_by_id:
+            raise ValidationError(
+                {
+                    "participants": (
+                        "Um participante foi enviado mais "
+                        "de uma vez."
+                    )
+                }
+            )
+
+        submitted_by_id[registration_id] = (
+            participant_data
+        )
+
+    if set(submitted_by_id) != set(
+        registrations_by_id
+    ):
+        raise ValidationError(
+            {
+                "participants": (
+                    "É necessário preencher exatamente os "
+                    "participantes deste pedido."
+                )
+            }
+        )
+
+    registrations_to_update = []
+
+    for registration_id, registration in (
+        registrations_by_id.items()
+    ):
+        participant_data = submitted_by_id[
+            registration_id
+        ]
+
+        for field_name in PARTICIPANT_DATA_FIELDS:
+            setattr(
+                registration,
+                field_name,
+                participant_data.get(
+                    field_name,
+                    "",
+                ),
+            )
+
+        if registration.completed_at is None:
+            registration.completed_at = reference_time
+
+        registration.updated_at = reference_time
+
+        # Executa validações de campos, modelo, unicidade
+        # e constraints antes de qualquer gravação.
+        registration.full_clean()
+
+        registrations_to_update.append(
+            registration
+        )
+
+    Registration.objects.bulk_update(
+        registrations_to_update,
+        fields=(
+            *PARTICIPANT_DATA_FIELDS,
+            "completed_at",
+            "updated_at",
+        ),
+    )
+
+    return RegistrationUpdateResult(
+        order=order,
+        registrations=tuple(
+            registrations_to_update
+        ),
+    )

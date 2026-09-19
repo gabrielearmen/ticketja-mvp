@@ -231,17 +231,15 @@
 
                     {% if order.status == "aguardando_pagamento" %}
                         <div class="checkout-next-action">
-                            <button
+                            <a
                                 class="button button--primary"
-                                type="button"
-                                disabled
+                                href="{% url 'registrations:participants' public_code=order.public_code %}"
                             >
                                 Continuar para participantes
-                            </button>
+                            </a>
 
                             <p>
-                                O cadastro dos participantes será
-                                habilitado na próxima etapa.
+                                Preencha uma pessoa para cada ingresso reservado.
                             </p>
                         </div>
                     {% elif order.status == "expirado" %}
