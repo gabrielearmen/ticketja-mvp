@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    Kits de {{ event.title }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/events-dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/kits-dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section
+        class="dashboard-page"
+        aria-labelledby="kit-configuration-title"
+    >
+        <div class="container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        Kits e estoque
+                    </p>
+
+                    <h1 id="kit-configuration-title">
+                        {{ event.title }}
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        Configure os itens entregues aos participantes.
+                    </p>
+                </div>
+
+                <div class="dashboard-header__actions">
+                    <a
+                        class="button button--secondary"
+                        href="{% url 'events:ticket-configuration' event.id %}"
+                    >
+                        Ingressos e lotes
+                    </a>
+
+                    <a
+                        class="button button--secondary"
+                        href="{% url 'events:organizer-list' %}"
+                    >
+                        Voltar aos eventos
+                    </a>
+
+                    {% if event.is_editable and has_ticket_types %}
+                        <a
+                            class="button button--primary"
+                            href="{% url 'kits:create' event.id %}"
+                        >
+                            Cadastrar kit
+                        </a>
+                    {% endif %}
+                </div>
+            </header>
+
+            <div class="kit-summary" aria-label="Resumo dos kits">
+                <div class="kit-summary__item">
+                    <span>Kits cadastrados</span>
+                    <strong>{{ kit_rows|length }}</strong>
+                </div>
+
+                <div class="kit-summary__item">
+                    <span>Estoque total</span>
+                    <strong>{{ total_stock }}</strong>
+                </div>
+
+                <div class="kit-summary__item">
+                    <span>Reservado</span>
+                    <strong>{{ total_reserved }}</strong>
+                </div>
+
+                <div class="kit-summary__item">
+                    <span>Disponível</span>
+                    <strong>{{ total_available }}</strong>
+                </div>
+            </div>
+
+            {% if not event.is_editable %}
+                <div class="dashboard-notice">
+                    Este evento não está em rascunho. Os kits e estoques
+                    estão disponíveis somente para consulta.
+                </div>
+            {% elif not has_ticket_types %}
+                <div class="dashboard-notice">
+                    Antes de cadastrar um kit, crie pelo menos um tipo
+                    de ingresso para este evento.
+
+                    <a
+                        class="text-link"
+                        href="{% url 'events:ticket-configuration' event.id %}"
+                    >
+                        Configurar ingressos →
+                    </a>
+                </div>
+            {% endif %}
+
+            {% if kit_rows %}
+                <div class="kit-list">
+                    {% for row in kit_rows %}
+                        <article class="kit-card">
+                            <header class="kit-card__header">
+                                <div>
+                                    <p class="kit-card__eyebrow">
+                                        Kit do evento
+                                    </p>
+
+                                    <h2>{{ row.kit.name }}</h2>
+                                </div>
+
+                                <div class="kit-card__statuses">
+                                    <span
+                                        class="
+                                            kit-status
+                                            {% if row.kit.is_active %}
+                                                kit-status--active
+                                            {% else %}
+                                                kit-status--inactive
+                                            {% endif %}
+                                        "
+                                    >
+                                        {% if row.kit.is_active %}
+                                            Ativo
+                                        {% else %}
+                                            Inativo
+                                        {% endif %}
+                                    </span>
+
+                                    <span
+                                        class="
+                                            kit-status
+                                            {% if row.kit.is_required %}
+                                                kit-status--required
+                                            {% else %}
+                                                kit-status--optional
+                                            {% endif %}
+                                        "
+                                    >
+                                        {% if row.kit.is_required %}
+                                            Obrigatório
+                                        {% else %}
+                                            Opcional
+                                        {% endif %}
+                                    </span>
+                                </div>
+                            </header>
+
+                            {% if row.kit.description %}
+                                <p class="kit-card__description">
+                                    {{ row.kit.description }}
+                                </p>
+                            {% endif %}
+
+                            <div class="kit-card__tickets">
+                                <strong>Tipos de ingresso vinculados</strong>
+
+                                <div class="kit-ticket-badges">
+                                    {% for ticket_type in row.kit.ticket_types.all %}
+                                        <span class="kit-ticket-badge">
+                                            {{ ticket_type.name }}
+                                        </span>
+                                    {% empty %}
+                                        <span class="kit-ticket-badge">
+                                            Nenhum ingresso vinculado
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <dl class="kit-card__totals">
+                                <div>
+                                    <dt>Estoque</dt>
+                                    <dd>{{ row.total_stock }}</dd>
+                                </div>
+
+                                <div>
+                                    <dt>Reservado</dt>
+                                    <dd>{{ row.total_reserved }}</dd>
+                                </div>
+
+                                <div>
+                                    <dt>Disponível</dt>
+                                    <dd>{{ row.total_available }}</dd>
+                                </div>
+                            </dl>
+
+                            {% if event.is_editable %}
+                                <div class="kit-card__actions">
+                                    <a
+                                        class="button button--secondary"
+                                        href="{% url 'kits:update' event.id row.kit.id %}"
+                                    >
+                                        Editar kit
+                                    </a>
+
+                                    <a
+                                        class="button button--primary"
+                                        href="{% url 'kits:option-create' event.id row.kit.id %}"
+                                    >
+                                        Adicionar opção
+                                    </a>
+                                </div>
+                            {% endif %}
+
+                            <div class="kit-stock">
+                                <div class="kit-stock__heading">
+                                    <div>
+                                        <h3>Variações e estoque</h3>
+
+                                        <p>
+                                            Tamanhos, cores ou opções disponíveis.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {% if row.option_rows %}
+                                    <div class="kit-stock__table-wrapper">
+                                        <table class="kit-stock__table">
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Opção</th>
+                                                    <th scope="col">Estoque</th>
+                                                    <th scope="col">Reservado</th>
+                                                    <th scope="col">Disponível</th>
+                                                    <th scope="col">Situação</th>
+
+                                                    {% if event.is_editable %}
+                                                        <th scope="col">
+                                                            Ação
+                                                        </th>
+                                                    {% endif %}
+                                                </tr>
+                                            </thead>
+
+                                            <tbody>
+                                                {% for option_row in row.option_rows %}
+                                                    <tr>
+                                                        <th scope="row">
+                                                            {{ option_row.option.name }}
+                                                        </th>
+
+                                                        <td>
+                                                            {{ option_row.option.stock_quantity }}
+                                                        </td>
+
+                                                        <td>
+                                                            {{ option_row.reserved_quantity }}
+                                                        </td>
+
+                                                        <td>
+                                                            <strong>
+                                                                {{ option_row.available_quantity }}
+                                                            </strong>
+                                                        </td>
+
+                                                        <td>
+                                                            <span
+                                                                class="
+                                                                    kit-option-status
+                                                                    {% if option_row.option.is_active %}
+                                                                        kit-option-status--active
+                                                                    {% else %}
+                                                                        kit-option-status--inactive
+                                                                    {% endif %}
+                                                                "
+                                                            >
+                                                                {% if option_row.option.is_active %}
+                                                                    Ativa
+                                                                {% else %}
+                                                                    Inativa
+                                                                {% endif %}
+                                                            </span>
+                                                        </td>
+
+                                                        {% if event.is_editable %}
+                                                            <td>
+                                                                <a
+                                                                    class="text-link"
+                                                                    href="{% url 'kits:option-update' event.id row.kit.id option_row.option.id %}"
+                                                                >
+                                                                    Editar
+                                                                </a>
+                                                            </td>
+                                                        {% endif %}
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <div class="kit-stock__empty">
+                                        <p>
+                                            Nenhuma opção ou tamanho cadastrado.
+                                        </p>
+
+                                        {% if event.is_editable %}
+                                            <a
+                                                class="text-link"
+                                                href="{% url 'kits:option-create' event.id row.kit.id %}"
+                                            >
+                                                Adicionar primeira opção →
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="dashboard-card dashboard-empty">
+                    <div class="dashboard-empty__content">
+                        <div
+                            class="dashboard-empty__icon"
+                            aria-hidden="true"
+                        >
+                            +
+                        </div>
+
+                        <h2>Nenhum kit cadastrado</h2>
+
+                        <p>
+                            Cadastre o conteúdo que será entregue aos
+                            participantes deste evento.
+                        </p>
+
+                        {% if event.is_editable and has_ticket_types %}
+                            <a
+                                class="button button--primary"
+                                href="{% url 'kits:create' event.id %}"
+                            >
+                                Cadastrar primeiro kit
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="kit-reservation-note">
+                <strong>Controle de reservas</strong>
+
+                <p>
+                    Nesta etapa, o estoque reservado permanece em zero.
+                    A reserva real por participante será ativada na
+                    próxima fase do fluxo de kits.
+                </p>
+            </div>
+        </div>
+    </section>
+{% endblock %}

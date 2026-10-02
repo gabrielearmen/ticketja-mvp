@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% load static %}
+
+
+{% block title %}
+    {{ page_title }} — TicketJá
+{% endblock %}
+
+
+{% block extra_css %}
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/events-dashboard.css' %}"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/kits-dashboard.css' %}"
+    >
+{% endblock %}
+
+
+{% block content %}
+    <section
+        class="dashboard-page"
+        aria-labelledby="kit-form-title"
+    >
+        <div class="container event-form-container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">
+                        {{ event.title }}
+                    </p>
+
+                    <h1 id="kit-form-title">
+                        {{ page_title }}
+                    </h1>
+
+                    <p class="dashboard-header__description">
+                        Organização: {{ organization.name }}
+                    </p>
+                </div>
+
+                <a
+                    class="button button--secondary"
+                    href="{% url 'kits:configuration' event.id %}"
+                >
+                    Voltar aos kits
+                </a>
+            </header>
+
+            <form
+                class="event-form"
+                method="post"
+                novalidate
+            >
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                    <div class="form-alert" role="alert">
+                        {% for error in form.non_field_errors %}
+                            <p>{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="event-form__section">
+                    <div class="event-form__section-heading">
+                        <span aria-hidden="true">01</span>
+
+                        <div>
+                            <h2>Informações do kit</h2>
+
+                            <p>
+                                Descreva o conteúdo e determine para quais
+                                ingressos ele estará disponível.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="event-form__fields">
+                        {% for field in form %}
+                            {% if field.name == "ticket_types" %}
+                                <fieldset
+                                    class="
+                                        form-field
+                                        form-field--full
+                                        kit-ticket-field
+                                        {% if field.errors %}
+                                            form-field--error
+                                        {% endif %}
+                                    "
+                                >
+                                    <legend>
+                                        {{ field.label }}
+                                        <span aria-hidden="true">*</span>
+                                    </legend>
+
+                                    {{ field }}
+
+                                    {% if field.help_text %}
+                                        <p class="form-field__help">
+                                            {{ field.help_text }}
+                                        </p>
+                                    {% endif %}
+
+                                    {% if field.errors %}
+                                        <div
+                                            class="form-field__errors"
+                                            role="alert"
+                                        >
+                                            {% for error in field.errors %}
+                                                <p>{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </fieldset>
+                            {% elif field.name == "is_required" or field.name == "is_active" %}
+                                <div
+                                    class="
+                                        form-field
+                                        kit-checkbox-field
+                                        {% if field.errors %}
+                                            form-field--error
+                                        {% endif %}
+                                    "
+                                >
+                                    <label class="checkbox-field">
+                                        {{ field }}
+                                        <span>{{ field.label }}</span>
+                                    </label>
+
+                                    {% if field.help_text %}
+                                        <p class="form-field__help">
+                                            {{ field.help_text }}
+                                        </p>
+                                    {% endif %}
+
+                                    {% if field.errors %}
+                                        <div
+                                            class="form-field__errors"
+                                            role="alert"
+                                        >
+                                            {% for error in field.errors %}
+                                                <p>{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div
+                                    class="
+                                        form-field
+                                        {% if field.name == 'description' %}
+                                            form-field--full
+                                        {% endif %}
+                                        {% if field.errors %}
+                                            form-field--error
+                                        {% endif %}
+                                    "
+                                >
+                                    <label for="{{ field.id_for_label }}">
+                                        {{ field.label }}
+
+                                        {% if field.field.required %}
+                                            <span aria-hidden="true">*</span>
+                                        {% endif %}
+                                    </label>
+
+                                    {{ field }}
+
+                                    {% if field.help_text %}
+                                        <p class="form-field__help">
+                                            {{ field.help_text }}
+                                        </p>
+                                    {% endif %}
+
+                                    {% if field.errors %}
+                                        <div
+                                            class="form-field__errors"
+                                            role="alert"
+                                        >
+                                            {% for error in field.errors %}
+                                                <p>{{ error }}</p>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="event-form__footer">
+                    <p>
+                        Opções e tamanhos serão cadastrados após salvar
+                        o kit.
+                    </p>
+
+                    <div class="event-form__actions">
+                        <a
+                            class="button button--secondary"
+                            href="{% url 'kits:configuration' event.id %}"
+                        >
+                            Cancelar
+                        </a>
+
+                        <button
+                            class="button button--primary"
+                            type="submit"
+                        >
+                            {{ submit_label }}
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </section>
+{% endblock %}

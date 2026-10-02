@@ -5,6 +5,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from apps.kits.selection_services import (
+    synchronize_registration_kit_selections,
+)
 
 from apps.orders.models import (
     Order,
@@ -13,7 +16,6 @@ from apps.orders.models import (
 )
 
 from .models import Registration
-
 
 @dataclass(frozen=True, slots=True)
 class RegistrationSlotsResult:
@@ -306,11 +308,11 @@ PARTICIPANT_DATA_FIELDS = (
     "emergency_contact_phone",
 )
 
-
 @dataclass(frozen=True, slots=True)
 class RegistrationUpdateResult:
     order: Order
     registrations: tuple[Registration, ...]
+    kit_selections: tuple
 
 
 @transaction.atomic
@@ -407,6 +409,14 @@ def update_registration_participants(
             }
         )
 
+    kit_selection_result = (
+        synchronize_registration_kit_selections(
+            registrations=registrations,
+            submitted_by_registration=submitted_by_id,
+            at=reference_time,
+        )
+    )
+
     registrations_to_update = []
 
     for registration_id, registration in (
@@ -452,5 +462,8 @@ def update_registration_participants(
         order=order,
         registrations=tuple(
             registrations_to_update
+        ),
+        kit_selections=(
+            kit_selection_result.selections
         ),
     )
