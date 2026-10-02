@@ -4,9 +4,14 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
+from apps.kits.selectors import (
+    participant_kit_catalog_for_ticket_types,
+)
 from apps.orders.models import OrderStatus
 from apps.orders.selectors import order_for_buyer_or_404
 from apps.orders.services import expire_order_reservation
+from apps.payments.gateways.base import PaymentGatewayError
+from apps.payments.services import initiate_order_payment
 
 from .forms import RegistrationParticipantFormSet
 from .models import Registration
@@ -24,13 +29,16 @@ def _service_error_messages(error):
             for message in messages_list
         ]
 
-    return list(error.messages)
+    if hasattr(error, "messages"):
+        return list(error.messages)
+
+    return [str(error)]
 
 
 def _participant_payload(formset):
     """
-    Transforma somente os dados validados do formulário em uma
-    estrutura aceita pelo serviço.
+    Transforma somente dados validados na estrutura aceita pelo
+    serviço transacional.
     """
     return [
         {
@@ -55,9 +63,43 @@ def _participant_payload(formset):
                     "emergency_contact_phone"
                 ]
             ),
+            "kit_selections": (
+                form.kit_selection_payload()
+            ),
         }
         for form in formset.forms
     ]
+
+
+def _required_kit_choices_are_complete(
+    *,
+    registrations,
+    kit_catalog,
+):
+    for registration in registrations:
+        applicable_kits = kit_catalog.get(
+            registration.order_item.ticket_type_id,
+            (),
+        )
+
+        required_kit_ids = {
+            kit_entry.kit.id
+            for kit_entry in applicable_kits
+            if kit_entry.kit.is_required
+        }
+
+        selected_kit_ids = {
+            selection.kit_id
+            for selection
+            in registration.kit_selections.all()
+        }
+
+        if not required_kit_ids.issubset(
+            selected_kit_ids
+        ):
+            return False
+
+    return True
 
 
 @login_required
@@ -83,7 +125,9 @@ def participant_details(request, public_code):
 
         return redirect(
             "orders:checkout-detail",
-            public_code=expiration_result.order.public_code,
+            public_code=(
+                expiration_result.order.public_code
+            ),
         )
 
     if order.status != OrderStatus.AWAITING_PAYMENT:
@@ -127,11 +171,33 @@ def participant_details(request, public_code):
             "order_item__ticket_type",
             "order_item__ticket_lot",
         )
+        .prefetch_related(
+            "kit_selections",
+            "kit_selections__kit",
+            "kit_selections__option",
+        )
         .order_by(
             "order_item__created_at",
             "position",
         )
     )
+
+    ticket_type_ids = set(
+        registrations.values_list(
+            "order_item__ticket_type_id",
+            flat=True,
+        )
+    )
+
+    kit_catalog = (
+        participant_kit_catalog_for_ticket_types(
+            ticket_type_ids=ticket_type_ids,
+        )
+    )
+
+    form_kwargs = {
+        "kit_catalog_by_ticket_type": kit_catalog,
+    }
 
     service_errors = []
 
@@ -140,6 +206,7 @@ def participant_details(request, public_code):
             request.POST,
             queryset=registrations,
             prefix="participants",
+            form_kwargs=form_kwargs,
         )
 
         if formset.is_valid():
@@ -156,10 +223,64 @@ def participant_details(request, public_code):
                     _service_error_messages(error)
                 )
             else:
+                submit_action = request.POST.get(
+                    "submit_action",
+                    "save",
+                )
+
+                if submit_action == "continue":
+                    try:
+                        payment_result = (
+                            initiate_order_payment(
+                                order_id=order.id,
+                                buyer=request.user,
+                            )
+                        )
+                    except (
+                        ValidationError,
+                        PaymentGatewayError,
+                    ) as error:
+                        for error_message in (
+                            _service_error_messages(error)
+                        ):
+                            messages.error(
+                                request,
+                                error_message,
+                            )
+
+                        return redirect(
+                            "registrations:participants",
+                            public_code=(
+                                order.public_code
+                            ),
+                        )
+
+                    if payment_result.is_free:
+                        messages.success(
+                            request,
+                            (
+                                "Inscrição gratuita "
+                                "confirmada com sucesso."
+                            ),
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            (
+                                "Participantes salvos e "
+                                "cobrança PIX preparada."
+                            ),
+                        )
+
+                    return redirect(
+                        "payments:detail",
+                        public_code=order.public_code,
+                    )
+
                 messages.success(
                     request,
                     (
-                        "Dados dos participantes salvos "
+                        "Participantes e kits salvos "
                         "com sucesso."
                     ),
                 )
@@ -172,13 +293,29 @@ def participant_details(request, public_code):
         formset = RegistrationParticipantFormSet(
             queryset=registrations,
             prefix="participants",
+            form_kwargs=form_kwargs,
         )
 
+    registration_list = list(registrations)
+
+    personal_data_completed = (
+        bool(registration_list)
+        and all(
+            registration.completed_at is not None
+            for registration in registration_list
+        )
+    )
+
+    required_kits_completed = (
+        _required_kit_choices_are_complete(
+            registrations=registration_list,
+            kit_catalog=kit_catalog,
+        )
+    )
+
     all_completed = (
-        registrations.exists()
-        and not registrations.filter(
-            completed_at__isnull=True,
-        ).exists()
+        personal_data_completed
+        and required_kits_completed
     )
 
     context = {

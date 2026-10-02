@@ -1,0 +1,335 @@
+.kit-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.kit-summary__item {
+    padding: 1.1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.9rem;
+    background: var(--color-white);
+}
+
+.kit-summary__item span {
+    display: block;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.kit-summary__item strong {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 1.55rem;
+    letter-spacing: -0.04em;
+}
+
+.kit-list {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 1.25rem;
+}
+
+.kit-card {
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    background: var(--color-white);
+}
+
+.kit-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem 1.25rem 0;
+}
+
+.kit-card__eyebrow {
+    margin: 0 0 0.35rem;
+    color: var(--color-orange-700);
+    font-size: 0.68rem;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.kit-card h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    letter-spacing: -0.035em;
+}
+
+.kit-card__statuses {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.45rem;
+}
+
+.kit-status,
+.kit-option-status {
+    display: inline-flex;
+    align-items: center;
+    width: max-content;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.68rem;
+    font-weight: 850;
+}
+
+.kit-status--active,
+.kit-option-status--active {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.kit-status--inactive,
+.kit-option-status--inactive {
+    color: #991b1b;
+    background: #fee2e2;
+}
+
+.kit-status--required {
+    color: var(--color-orange-800);
+    background: var(--color-orange-100);
+}
+
+.kit-status--optional {
+    color: #57534e;
+    background: #f5f5f4;
+}
+
+.kit-card__description {
+    margin: 0;
+    padding: 0.85rem 1.25rem 0;
+    color: var(--color-muted);
+    line-height: 1.65;
+}
+
+.kit-card__tickets {
+    padding: 1rem 1.25rem 0;
+}
+
+.kit-card__tickets > strong {
+    display: block;
+    margin-bottom: 0.55rem;
+    font-size: 0.75rem;
+}
+
+.kit-ticket-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.kit-ticket-badge {
+    padding: 0.4rem 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    color: var(--color-muted);
+    background: #fafaf9;
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.kit-card__totals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 1.25rem;
+    padding: 1rem;
+    border-radius: 0.8rem;
+    background: #fafaf9;
+}
+
+.kit-card__totals dt {
+    color: var(--color-muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+}
+
+.kit-card__totals dd {
+    margin: 0.25rem 0 0;
+    font-size: 1.2rem;
+    font-weight: 850;
+}
+
+.kit-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0 1.25rem 1.25rem;
+}
+
+.kit-stock {
+    padding: 1.25rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.kit-stock__heading h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.kit-stock__heading p {
+    margin: 0.3rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.78rem;
+}
+
+.kit-stock__table-wrapper {
+    overflow-x: auto;
+    margin-top: 1rem;
+}
+
+.kit-stock__table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 42rem;
+}
+
+.kit-stock__table th,
+.kit-stock__table td {
+    padding: 0.8rem;
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    font-size: 0.8rem;
+}
+
+.kit-stock__table thead th {
+    color: var(--color-muted);
+    background: #fafaf9;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.kit-stock__table tbody tr:last-child th,
+.kit-stock__table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.kit-stock__empty {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px dashed var(--color-border);
+    border-radius: 0.8rem;
+    color: var(--color-muted);
+    background: #fafaf9;
+}
+
+.kit-stock__empty p {
+    margin: 0 0 0.4rem;
+}
+
+.kit-reservation-note {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border-left: 0.25rem solid var(--color-orange-500);
+    border-radius: 0.5rem;
+    background: var(--color-white);
+}
+
+.kit-reservation-note strong {
+    display: block;
+    font-size: 0.82rem;
+}
+
+.kit-reservation-note p {
+    margin: 0.3rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    line-height: 1.6;
+}
+
+.kit-ticket-field {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.kit-ticket-field legend {
+    margin-bottom: 0.6rem;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.kit-ticket-field legend span {
+    color: var(--color-orange-700);
+}
+
+.kit-ticket-types {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.kit-ticket-types > div {
+    min-width: 0;
+}
+
+.kit-ticket-types label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 3rem;
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.7rem;
+    cursor: pointer;
+    background: #fafaf9;
+}
+
+.kit-ticket-types input {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    accent-color: var(--color-orange-700);
+}
+
+.kit-checkbox-field {
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.8rem;
+    background: #fafaf9;
+}
+
+.kit-checkbox-field .checkbox-field {
+    margin: 0;
+}
+
+@media (max-width: 52rem) {
+    .kit-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 40rem) {
+    .kit-summary,
+    .kit-card__totals,
+    .kit-ticket-types {
+        grid-template-columns: 1fr;
+    }
+
+    .kit-card__header {
+        flex-direction: column;
+    }
+
+    .kit-card__statuses {
+        justify-content: flex-start;
+    }
+
+    .kit-card__actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .kit-card__actions .button {
+        width: 100%;
+    }
+}

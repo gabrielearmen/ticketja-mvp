@@ -13,8 +13,10 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("apps.accounts.urls")),
     path("", include("apps.events.urls")),
+    path("", include("apps.kits.urls")),
     path("", include("apps.orders.urls")),
     path("", include("apps.registrations.urls")),
+    path("", include("apps.payments.urls")),
     path("", include("apps.organizations.urls")),
     path("", include("apps.core.urls")),
 ]

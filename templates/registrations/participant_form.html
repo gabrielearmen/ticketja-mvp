@@ -60,7 +60,6 @@
 
                 <p>
                     Preencha uma pessoa para cada ingresso reservado.
-                    O comprador não precisa ser um dos participantes.
                 </p>
             </header>
 
@@ -197,7 +196,7 @@
                             {% endif %}
 
                             <div class="participant-fields">
-                                {% for field in form.visible_fields %}
+                                {% for field in form.participant_fields %}
                                     <div
                                         class="
                                             participant-field
@@ -239,7 +238,86 @@
                                         {% endif %}
                                     </div>
                                 {% endfor %}
-                            </div>
+                                                       </div>
+
+                            {% if form.kit_choice_fields %}
+                                <section
+                                    class="participant-kits"
+                                    aria-labelledby="participant-kits-{{ forloop.counter }}"
+                                >
+                                    <header class="participant-kits__header">
+                                        <div>
+                                            <p>Kit do participante</p>
+
+                                            <h3
+                                                id="participant-kits-{{ forloop.counter }}"
+                                            >
+                                                Escolha os tamanhos ou opções
+                                            </h3>
+                                        </div>
+
+                                        <span>
+                                            Escolha individual
+                                        </span>
+                                    </header>
+
+                                    <div class="participant-kits__fields">
+                                        {% for field in form.kit_choice_fields %}
+                                            <div
+                                                class="
+                                                    participant-field
+                                                    participant-field--wide
+                                                    participant-kit-field
+                                                    {% if field.errors %}
+                                                        participant-field--error
+                                                    {% endif %}
+                                                "
+                                            >
+                                                <label
+                                                    for="{{ field.id_for_label }}"
+                                                >
+                                                    {{ field.label }}
+
+                                                    {% if field.field.required %}
+                                                        <span aria-hidden="true">*</span>
+                                                    {% else %}
+                                                        <small>Opcional</small>
+                                                    {% endif %}
+                                                </label>
+
+                                                {{ field }}
+
+                                                {% if field.help_text %}
+                                                    <p class="participant-field__help">
+                                                        {{ field.help_text }}
+                                                    </p>
+                                                {% endif %}
+
+                                                {% if not field.field.has_available_options %}
+                                                    <div
+                                                        class="participant-kit-field__unavailable"
+                                                        role="status"
+                                                    >
+                                                        Não há opções disponíveis
+                                                        neste momento.
+                                                    </div>
+                                                {% endif %}
+
+                                                {% if field.errors %}
+                                                    <div
+                                                        class="participant-field__errors"
+                                                        role="alert"
+                                                    >
+                                                        {% for error in field.errors %}
+                                                            <p>{{ error }}</p>
+                                                        {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                </section>
+                            {% endif %}
                         </article>
                     {% endfor %}
                 </div>
@@ -259,30 +337,25 @@
                         </p>
 
                         <button
+                            class="button button--secondary"
+                            type="submit"
+                            name="submit_action"
+                            value="save"
+                        >
+                            Salvar alterações
+                        </button>
+
+                        <button
                             class="button button--primary"
                             type="submit"
+                            name="submit_action"
+                            value="continue"
                         >
-                            Salvar participantes
+                            Continuar para pagamento
                         </button>
                     </div>
                 </footer>
             </form>
-
-            {% if all_completed %}
-                <div class="checkout-next-action">
-                    <button
-                        class="button button--primary"
-                        type="button"
-                        disabled
-                    >
-                        Continuar para pagamento
-                    </button>
-
-                    <p>
-                        O pagamento será habilitado na próxima fase.
-                    </p>
-                </div>
-            {% endif %}
         </div>
     </div>
 {% endblock %}

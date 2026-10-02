@@ -1,0 +1,459 @@
+from datetime import timedelta
+from decimal import Decimal
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
+
+from apps.events.models import (
+    Event,
+    EventStatus,
+    SportCategory,
+    TicketLot,
+    TicketType,
+)
+from apps.orders.models import (
+    Order,
+    OrderItem,
+    OrderStatus,
+)
+from apps.organizations.models import (
+    Organization,
+    OrganizationStatus,
+)
+from apps.registrations.models import (
+    DocumentType,
+    Registration,
+)
+
+from .gateways.base import (
+    PaymentGateway,
+    PaymentGatewayTemporaryError,
+    PaymentSnapshot,
+    PixChargeRequest,
+    PixChargeResult,
+)
+from .gateways.mercado_pago import MercadoPagoGateway
+from .models import (
+    Payment,
+    PaymentMethod,
+    PaymentStatus,
+)
+from .services import initiate_order_payment
+
+
+class FakePixGateway(PaymentGateway):
+    def __init__(self, *, fail_once=False):
+        self.create_calls = []
+        self.fail_once = fail_once
+
+    def create_pix_charge(self, request):
+        self.create_calls.append(request)
+
+        if self.fail_once:
+            self.fail_once = False
+            raise PaymentGatewayTemporaryError(
+                "Falha temporária simulada."
+            )
+
+        return PixChargeResult(
+            provider_order_id="ORD-TEST-001",
+            provider_payment_id="PAY-TEST-001",
+            provider_status="action_required",
+            provider_status_detail="waiting_transfer",
+            pix_copy_paste="000201TESTEPIX",
+            pix_qr_code_base64="BASE64-TESTE",
+            checkout_url=(
+                "https://www.mercadopago.com.br/"
+                "sandbox/payments/test"
+            ),
+            expires_at=request.expires_at,
+        )
+
+    def fetch_payment(self, provider_order_id):
+        return PaymentSnapshot(
+            provider_order_id=provider_order_id,
+            provider_payment_id="PAY-TEST-001",
+            provider_status="action_required",
+            provider_status_detail="waiting_transfer",
+            amount=Decimal("100.00"),
+        )
+
+    def cancel_payment(self, provider_order_id):
+        return PaymentSnapshot(
+            provider_order_id=provider_order_id,
+            provider_payment_id="PAY-TEST-001",
+            provider_status="canceled",
+            provider_status_detail="canceled",
+            amount=Decimal("100.00"),
+        )
+
+
+class MercadoPagoGatewayTests(SimpleTestCase):
+    def test_creates_pix_with_idempotency_and_qr_code(self):
+        gateway = MercadoPagoGateway(
+            access_token="APP_USR-TEST-TOKEN",
+            api_base_url=(
+                "https://api.mercadopago.com"
+            ),
+            timeout_seconds=15,
+        )
+
+        provider_response = {
+            "id": "ORD-123",
+            "status": "action_required",
+            "status_detail": "waiting_transfer",
+            "transactions": {
+                "payments": [
+                    {
+                        "id": "PAY-123",
+                        "status": "action_required",
+                        "status_detail": (
+                            "waiting_transfer"
+                        ),
+                        "amount": "100.00",
+                        "payment_method": {
+                            "id": "pix",
+                            "type": "bank_transfer",
+                            "ticket_url": (
+                                "https://www.mercadopago.com.br/"
+                                "sandbox/payments/123"
+                            ),
+                            "qr_code": "PIX-COPIA-E-COLA",
+                            "qr_code_base64": (
+                                "IMAGEM-BASE64"
+                            ),
+                        },
+                    }
+                ]
+            },
+        }
+
+        request_data = PixChargeRequest(
+            payment_id=(
+                __import__("uuid").uuid4()
+            ),
+            idempotency_key=(
+                __import__("uuid").uuid4()
+            ),
+            external_reference="TJP-TESTE123",
+            description="Pedido de teste",
+            amount=Decimal("100.00"),
+            platform_fee=Decimal("0.00"),
+            payer_email="comprador@example.com",
+            expires_at=(
+                timezone.now()
+                + timedelta(minutes=30)
+            ),
+        )
+
+        with patch.object(
+            gateway,
+            "_request_json",
+            return_value=provider_response,
+        ) as request_mock:
+            result = gateway.create_pix_charge(
+                request_data
+            )
+
+        request_kwargs = (
+            request_mock.call_args.kwargs
+        )
+
+        self.assertEqual(
+            request_kwargs["method"],
+            "POST",
+        )
+        self.assertEqual(
+            request_kwargs["path"],
+            "/v1/orders",
+        )
+        self.assertEqual(
+            request_kwargs["idempotency_key"],
+            request_data.idempotency_key,
+        )
+        self.assertEqual(
+            request_kwargs["payload"]["total_amount"],
+            "100.00",
+        )
+        self.assertEqual(
+            result.provider_order_id,
+            "ORD-123",
+        )
+        self.assertEqual(
+            result.pix_copy_paste,
+            "PIX-COPIA-E-COLA",
+        )
+
+
+class PixPaymentServiceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        user_model = get_user_model()
+
+        cls.buyer = user_model.objects.create_user(
+            email="buyer-pix@example.com",
+            password="Senha-Segura!2026",
+        )
+
+        cls.other_buyer = user_model.objects.create_user(
+            email="other-pix@example.com",
+            password="Senha-Segura!2026",
+        )
+
+        cls.organization = Organization.objects.create(
+            name="Organização PIX",
+            slug="organizacao-pix",
+            status=OrganizationStatus.APPROVED,
+        )
+
+        cls.event = Event.objects.create(
+            organization=cls.organization,
+            title="Evento PIX",
+            summary="Evento utilizado nos testes PIX.",
+            sport_category=SportCategory.RUNNING,
+            event_datetime=(
+                timezone.now() + timedelta(days=30)
+            ),
+            city="Fortaleza",
+            state="CE",
+            address="Avenida dos Testes, 100",
+            capacity=100,
+            status=EventStatus.PUBLISHED,
+        )
+
+        cls.ticket_type = TicketType.objects.create(
+            event=cls.event,
+            name="Ingresso Geral",
+            description="Ingresso dos testes.",
+            capacity=100,
+            is_active=True,
+        )
+
+        cls.ticket_lot = TicketLot.objects.create(
+            ticket_type=cls.ticket_type,
+            name="Primeiro lote",
+            price=Decimal("100.00"),
+            quantity=100,
+            sales_start=(
+                timezone.now() - timedelta(days=1)
+            ),
+            sales_end=(
+                timezone.now() + timedelta(days=20)
+            ),
+            is_active=True,
+        )
+
+    def create_ready_order(self, *, total="100.00"):
+        amount = Decimal(total)
+
+        order = Order.objects.create(
+            buyer=self.buyer,
+            organization=self.organization,
+            event=self.event,
+            status=OrderStatus.AWAITING_PAYMENT,
+            subtotal=amount,
+            service_fee=Decimal("0.00"),
+            total=amount,
+            reservation_expires_at=(
+                timezone.now() + timedelta(minutes=15)
+            ),
+        )
+
+        item = OrderItem.objects.create(
+            order=order,
+            ticket_type=self.ticket_type,
+            ticket_lot=self.ticket_lot,
+            quantity=1,
+            unit_price=amount,
+            subtotal=amount,
+        )
+
+        Registration.objects.create(
+            order_item=item,
+            position=1,
+            full_name="Participante Teste",
+            document_type=DocumentType.CPF,
+            document_number="52998224725",
+            birth_date=timezone.localdate().replace(
+                year=1990
+            ),
+            email="participante@example.com",
+            completed_at=timezone.now(),
+        )
+
+        return order
+
+    def test_creates_pix_and_extends_reservation(self):
+        order = self.create_ready_order()
+        gateway = FakePixGateway()
+
+        before = timezone.now()
+
+        result = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            gateway=gateway,
+        )
+
+        order.refresh_from_db()
+        result.payment.refresh_from_db()
+
+        self.assertEqual(
+            result.payment.status,
+            PaymentStatus.PENDING,
+        )
+        self.assertEqual(
+            result.payment.method,
+            PaymentMethod.PIX,
+        )
+        self.assertEqual(
+            result.payment.pix_copy_paste,
+            "000201TESTEPIX",
+        )
+        self.assertEqual(
+            order.reservation_expires_at,
+            result.payment.expires_at,
+        )
+        self.assertGreaterEqual(
+            order.reservation_expires_at,
+            before + timedelta(minutes=29),
+        )
+        self.assertEqual(
+            len(gateway.create_calls),
+            1,
+        )
+
+    def test_repeated_request_does_not_create_second_pix(self):
+        order = self.create_ready_order()
+        gateway = FakePixGateway()
+
+        first = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            gateway=gateway,
+        )
+
+        second = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            gateway=gateway,
+        )
+
+        self.assertEqual(
+            first.payment.id,
+            second.payment.id,
+        )
+        self.assertEqual(
+            Payment.objects.filter(
+                order=order
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            len(gateway.create_calls),
+            1,
+        )
+
+    def test_temporary_failure_reuses_same_key(self):
+        order = self.create_ready_order()
+        gateway = FakePixGateway(fail_once=True)
+
+        with self.assertRaises(
+            PaymentGatewayTemporaryError
+        ):
+            initiate_order_payment(
+                order_id=order.id,
+                buyer=self.buyer,
+                gateway=gateway,
+            )
+
+        payment = Payment.objects.get(order=order)
+        original_key = payment.idempotency_key
+
+        result = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            gateway=gateway,
+        )
+
+        self.assertEqual(
+            result.payment.idempotency_key,
+            original_key,
+        )
+        self.assertEqual(
+            len(gateway.create_calls),
+            2,
+        )
+        self.assertEqual(
+            gateway.create_calls[0].idempotency_key,
+            gateway.create_calls[1].idempotency_key,
+        )
+
+    def test_free_order_is_confirmed_without_gateway(self):
+        order = self.create_ready_order(total="0.00")
+        gateway = FakePixGateway()
+
+        result = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            gateway=gateway,
+        )
+
+        order.refresh_from_db()
+
+        self.assertTrue(result.is_free)
+        self.assertEqual(
+            result.payment.status,
+            PaymentStatus.APPROVED,
+        )
+        self.assertEqual(
+            result.payment.method,
+            PaymentMethod.FREE,
+        )
+        self.assertEqual(
+            order.status,
+            OrderStatus.PAID,
+        )
+        self.assertEqual(
+            len(gateway.create_calls),
+            0,
+        )
+
+    def test_incomplete_participant_blocks_payment(self):
+        order = self.create_ready_order()
+
+        Registration.objects.filter(
+            order_item__order=order
+        ).update(completed_at=None)
+
+        with self.assertRaises(ValidationError):
+            initiate_order_payment(
+                order_id=order.id,
+                buyer=self.buyer,
+                gateway=FakePixGateway(),
+            )
+
+        self.assertFalse(
+            Payment.objects.filter(
+                order=order
+            ).exists()
+        )
+
+    def test_another_buyer_cannot_pay_order(self):
+        order = self.create_ready_order()
+
+        with self.assertRaises(ValidationError):
+            initiate_order_payment(
+                order_id=order.id,
+                buyer=self.other_buyer,
+                gateway=FakePixGateway(),
+            )
+
+        self.assertFalse(
+            Payment.objects.filter(
+                order=order
+            ).exists()
+        )

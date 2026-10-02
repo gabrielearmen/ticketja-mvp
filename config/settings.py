@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -168,9 +169,10 @@ LOCAL_APPS = [
     "apps.core.apps.CoreConfig",
     "apps.organizations.apps.OrganizationsConfig",
     "apps.events.apps.EventsConfig",
+    "apps.kits.apps.KitsConfig",
     "apps.orders.apps.OrdersConfig",
     "apps.registrations.apps.RegistrationsConfig",
-
+    "apps.payments.apps.PaymentsConfig",
 ]
 
 
@@ -298,15 +300,26 @@ MEDIA_STORAGE_BACKEND = (
     else "django.core.files.storage.FileSystemStorage"
 )
 
+# Os testes não dependem de um manifesto produzido anteriormente
+# pelo collectstatic. Produção continua usando arquivos versionados,
+# comprimidos e com hash para cache seguro.
+RUNNING_TESTS = "test" in sys.argv
+
+STATICFILES_STORAGE_BACKEND = (
+    "django.contrib.staticfiles.storage.StaticFilesStorage"
+    if RUNNING_TESTS
+    else (
+        "whitenoise.storage."
+        "CompressedManifestStaticFilesStorage"
+    )
+)
+
 STORAGES = {
     "default": {
         "BACKEND": MEDIA_STORAGE_BACKEND,
     },
     "staticfiles": {
-        "BACKEND": (
-            "whitenoise.storage."
-            "CompressedManifestStaticFilesStorage"
-        ),
+        "BACKEND": STATICFILES_STORAGE_BACKEND,
     },
 }
 
@@ -367,4 +380,53 @@ ORDER_RESERVATION_MINUTES = environment_integer(
     default=15,
     minimum=5,
     maximum=60,
+)
+# Implementação concreta do provedor de pagamentos.
+#
+# O gateway fica desacoplado da regra de negócio. Futuramente
+# poderemos substituir o Mercado Pago sem reescrever pedidos,
+# inscrições, kits ou o restante do checkout.
+PAYMENT_GATEWAY_CLASS = os.environ.get(
+    "PAYMENT_GATEWAY_CLASS",
+    (
+        "apps.payments.gateways.mercado_pago."
+        "MercadoPagoGateway"
+    ),
+).strip()
+
+
+# Credencial privada utilizada exclusivamente no backend.
+#
+# Ela não pode aparecer em templates, JavaScript, GitHub,
+# mensagens de erro ou logs.
+MERCADO_PAGO_ACCESS_TOKEN = os.environ.get(
+    "MERCADO_PAGO_ACCESS_TOKEN",
+    "",
+).strip()
+
+
+# O Mercado Pago utiliza o mesmo endereço de API para testes e
+# produção. O ambiente é determinado pela credencial utilizada.
+MERCADO_PAGO_API_BASE_URL = os.environ.get(
+    "MERCADO_PAGO_API_BASE_URL",
+    "https://api.mercadopago.com",
+).strip().rstrip("/")
+
+
+# Limite máximo de espera de cada chamada ao provedor.
+MERCADO_PAGO_TIMEOUT_SECONDS = environment_integer(
+    "MERCADO_PAGO_TIMEOUT_SECONDS",
+    default=15,
+    minimum=5,
+    maximum=60,
+)
+
+
+# A Orders API do Mercado Pago exige pelo menos 30 minutos
+# para o vencimento de pagamentos PIX.
+PAYMENT_PIX_EXPIRATION_MINUTES = environment_integer(
+    "PAYMENT_PIX_EXPIRATION_MINUTES",
+    default=30,
+    minimum=30,
+    maximum=1440,
 )
