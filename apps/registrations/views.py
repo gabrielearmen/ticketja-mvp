@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -229,6 +230,15 @@ def participant_details(request, public_code):
                 )
 
                 if submit_action == "continue":
+                    if (
+                        order.total > 0
+                        and settings.MARKETPLACE_PAYMENTS_ENABLED
+                    ):
+                        return redirect(
+                            "payments:payer-details",
+                            public_code=order.public_code,
+                        )
+
                     try:
                         payment_result = (
                             initiate_order_payment(

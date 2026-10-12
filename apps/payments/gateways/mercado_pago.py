@@ -19,7 +19,6 @@ from .base import (
     PixChargeResult,
 )
 
-
 MINIMUM_PIX_EXPIRATION_SECONDS = 30 * 60
 MAXIMUM_PIX_EXPIRATION_SECONDS = 30 * 24 * 60 * 60
 
@@ -88,10 +87,10 @@ def _sanitized_provider_message(payload, status_code):
 
 class MercadoPagoGateway(PaymentGateway):
     """
-    Integração REST com a Orders API do Mercado Pago.
+    Integração REST com a Payments API do Mercado Pago.
 
-    Utilizamos somente bibliotecas nativas do Python. Assim,
-    não é necessário instalar um SDK adicional nesta fase.
+    O Split 1:1 utiliza o Access Token OAuth do vendedor e envia
+    a comissão do TicketJá no campo application_fee.
     """
 
     def __init__(
@@ -100,7 +99,9 @@ class MercadoPagoGateway(PaymentGateway):
         access_token=None,
         api_base_url=None,
         timeout_seconds=None,
+        use_orders_api=False,
     ):
+        self.use_orders_api = bool(use_orders_api)
         self.access_token = (
             access_token
             if access_token is not None
@@ -268,74 +269,77 @@ class MercadoPagoGateway(PaymentGateway):
         self,
         request: PixChargeRequest,
     ) -> PixChargeResult:
+        self._expiration_duration(
+            request.expiration_seconds
+        )
         amount = request.amount.quantize(
             Decimal("0.01")
         )
 
-        payload = {
-            "type": "online",
-            "total_amount": format(amount, ".2f"),
-            "external_reference": (
-                request.external_reference
-            ),
-            "processing_mode": "automatic",
-            "transactions": {
-                "payments": [
-                    {
-                        "amount": format(
-                            amount,
-                            ".2f",
-                        ),
-                        "payment_method": {
-                            "id": "pix",
-                            "type": "bank_transfer",
-                        },
-                        "expiration_time": (
-                            self._expiration_duration(
-                                request.expiration_seconds
-                            )
-                        ),
-                    }
-                ]
-            },
-            "payer": {
-                "email": request.payer_email,
-            },
+        payer = {
+            "email": request.payer_email,
         }
 
-        order_data = self._request_json(
+        if settings.MERCADO_PAGO_TEST_MODE:
+            payer["first_name"] = "APRO"
+            payer["last_name"] = request.payer_last_name or "Teste"
+        elif request.payer_first_name and request.payer_last_name:
+            payer["first_name"] = request.payer_first_name
+            payer["last_name"] = request.payer_last_name
+
+        if (
+            request.payer_document_type
+            and request.payer_document_number
+        ):
+            payer["identification"] = {
+                "type": request.payer_document_type,
+                "number": request.payer_document_number,
+            }
+
+        payload = {
+            "transaction_amount": float(amount),
+            "description": request.description,
+            "payment_method_id": "pix",
+            "external_reference": request.external_reference,
+            "date_of_expiration": request.expires_at.isoformat(),
+            "payer": payer,
+        }
+
+        platform_fee = request.platform_fee.quantize(
+            Decimal("0.01")
+        )
+
+        if platform_fee > Decimal("0.00"):
+            payload["application_fee"] = float(platform_fee)
+
+        payment_data = self._request_json(
             method="POST",
-            path="/v1/orders",
+            path="/v1/payments",
             payload=payload,
             idempotency_key=request.idempotency_key,
         )
 
-        provider_payment = _first_transaction_payment(
-            order_data
-        )
-
-        payment_method = (
-            provider_payment.get("payment_method") or {}
-        )
-
-        provider_order_id = str(
-            order_data.get("id") or ""
-        ).strip()
-
         provider_payment_id = str(
-            provider_payment.get("id") or ""
+            payment_data.get("id") or ""
         ).strip()
+        provider_order_id = provider_payment_id
+        point_of_interaction = (
+            payment_data.get("point_of_interaction") or {}
+        )
+        transaction_data = (
+            point_of_interaction.get("transaction_data") or {}
+        )
 
         pix_copy_paste = str(
-            payment_method.get("qr_code") or ""
+            transaction_data.get("qr_code") or ""
         ).strip()
 
         pix_qr_code_base64 = str(
-            payment_method.get("qr_code_base64") or ""
+            transaction_data.get("qr_code_base64") or ""
         ).strip()
 
         checkout_url = str(
-            payment_method.get("ticket_url") or ""
+            transaction_data.get("ticket_url") or ""
         ).strip()
 
         required_values = {
@@ -344,7 +348,6 @@ class MercadoPagoGateway(PaymentGateway):
                 provider_payment_id
             ),
             "código PIX": pix_copy_paste,
-            "QR Code PIX": pix_qr_code_base64,
             "endereço de pagamento": checkout_url,
         }
 
@@ -366,14 +369,10 @@ class MercadoPagoGateway(PaymentGateway):
             provider_order_id=provider_order_id,
             provider_payment_id=provider_payment_id,
             provider_status=str(
-                provider_payment.get("status")
-                or order_data.get("status")
-                or ""
+                payment_data.get("status") or ""
             ),
             provider_status_detail=str(
-                provider_payment.get("status_detail")
-                or order_data.get("status_detail")
-                or ""
+                payment_data.get("status_detail") or ""
             ),
             pix_copy_paste=pix_copy_paste,
             pix_qr_code_base64=pix_qr_code_base64,
@@ -381,28 +380,75 @@ class MercadoPagoGateway(PaymentGateway):
             expires_at=request.expires_at,
         )
 
-    def _snapshot_from_order(self, order_data):
-        provider_payment = _first_transaction_payment(
-            order_data
+    def _snapshot_from_payment(self, payment_data):
+        provider_status = str(
+            payment_data.get("status") or ""
         )
 
+        provider_status_detail = str(
+            payment_data.get("status_detail") or ""
+        )
+
+        amount = _decimal_value(
+            payment_data.get("transaction_amount")
+        )
+
+        approved_at = None
+
+        if provider_status == "approved":
+            approved_at = _parse_datetime(
+                payment_data.get("date_approved")
+            )
+
+        fee_details = payment_data.get("fee_details") or []
+        provider_fee = sum(
+            (
+                _decimal_value(item.get("amount"))
+                for item in fee_details
+                if isinstance(item, dict)
+                and str(item.get("type") or "").lower()
+                != "application_fee"
+            ),
+            Decimal("0.00"),
+        )
+        transaction_details = (
+            payment_data.get("transaction_details") or {}
+        )
+        net_amount = _decimal_value(
+            transaction_details.get("net_received_amount")
+        )
+        payment_id = str(payment_data.get("id") or "").strip()
+
+        return PaymentSnapshot(
+            provider_order_id=payment_id,
+            provider_payment_id=payment_id,
+            provider_status=provider_status,
+            provider_status_detail=provider_status_detail,
+            amount=amount,
+            approved_at=approved_at,
+            provider_fee=provider_fee,
+            net_amount=net_amount,
+            external_reference=str(
+                payment_data.get("external_reference") or ""
+            ).strip(),
+        )
+
+    def _snapshot_from_order(self, order_data):
+        provider_payment = _first_transaction_payment(order_data)
         provider_status = str(
             provider_payment.get("status")
             or order_data.get("status")
             or ""
         )
-
         provider_status_detail = str(
             provider_payment.get("status_detail")
             or order_data.get("status_detail")
             or ""
         )
-
         amount = _decimal_value(
             provider_payment.get("amount")
             or order_data.get("total_amount")
         )
-
         approved_at = None
 
         if provider_status == "processed":
@@ -411,18 +457,17 @@ class MercadoPagoGateway(PaymentGateway):
             )
 
         return PaymentSnapshot(
-            provider_order_id=str(
-                order_data.get("id") or ""
-            ),
+            provider_order_id=str(order_data.get("id") or "").strip(),
             provider_payment_id=str(
                 provider_payment.get("id") or ""
-            ),
+            ).strip(),
             provider_status=provider_status,
-            provider_status_detail=(
-                provider_status_detail
-            ),
+            provider_status_detail=provider_status_detail,
             amount=amount,
             approved_at=approved_at,
+            external_reference=str(
+                order_data.get("external_reference") or ""
+            ).strip(),
         )
 
     def fetch_payment(
@@ -434,12 +479,19 @@ class MercadoPagoGateway(PaymentGateway):
             safe="",
         )
 
-        order_data = self._request_json(
+        if self.use_orders_api:
+            order_data = self._request_json(
+                method="GET",
+                path=f"/v1/orders/{normalized_id}",
+            )
+            return self._snapshot_from_order(order_data)
+
+        payment_data = self._request_json(
             method="GET",
-            path=f"/v1/orders/{normalized_id}",
+            path=f"/v1/payments/{normalized_id}",
         )
 
-        return self._snapshot_from_order(order_data)
+        return self._snapshot_from_payment(payment_data)
 
     def cancel_payment(
         self,
@@ -450,12 +502,19 @@ class MercadoPagoGateway(PaymentGateway):
             safe="",
         )
 
-        order_data = self._request_json(
-            method="POST",
-            path=(
-                f"/v1/orders/{normalized_id}/cancel"
-            ),
+        if self.use_orders_api:
+            order_data = self._request_json(
+                method="POST",
+                path=f"/v1/orders/{normalized_id}/cancel",
+                idempotency_key=uuid4(),
+            )
+            return self._snapshot_from_order(order_data)
+
+        payment_data = self._request_json(
+            method="PUT",
+            path=f"/v1/payments/{normalized_id}",
+            payload={"status": "cancelled"},
             idempotency_key=uuid4(),
         )
 
-        return self._snapshot_from_order(order_data)
+        return self._snapshot_from_payment(payment_data)

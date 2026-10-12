@@ -1,120 +1,63 @@
 {% extends "base.html" %}
 {% load static %}
 
-
 {% block title %}
     Pagamento — {{ order.public_code }} — TicketJá
 {% endblock %}
 
-
 {% block extra_css %}
-    <link
-        rel="stylesheet"
-        href="{% static 'css/components.css' %}"
-    >
-
-    <link
-        rel="stylesheet"
-        href="{% static 'css/pages/checkout.css' %}"
-    >
-
-    <link
-        rel="stylesheet"
-        href="{% static 'css/pages/payment.css' %}"
-    >
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pages/checkout.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pages/payment.css' %}">
 {% endblock %}
 
-
 {% block content %}
-    <div class="checkout-page">
+    <div
+        class="checkout-page"
+        data-payment-monitor
+        data-payment-state="{{ ui_state }}"
+        data-payment-status-url="{{ payment_status_url }}"
+    >
         <div class="container payment-container">
-            <nav
-                class="checkout-breadcrumb"
-                aria-label="Navegação estrutural"
-            >
-                <a href="{% url 'core:home' %}#eventos">
-                    Eventos
-                </a>
-
+            <nav class="checkout-breadcrumb" aria-label="Navegação estrutural">
+                <a href="{% url 'core:home' %}#eventos">Eventos</a>
                 <span aria-hidden="true">/</span>
-
-                <a
-                    href="{% url 'orders:checkout-detail' public_code=order.public_code %}"
-                >
+                <a href="{% url 'orders:checkout-detail' public_code=order.public_code %}">
                     {{ order.public_code }}
                 </a>
-
                 <span aria-hidden="true">/</span>
-
-                <span aria-current="page">
-                    Pagamento
-                </span>
+                <span aria-current="page">Pagamento</span>
             </nav>
 
             <header class="checkout-heading">
-                <p class="checkout-heading__eyebrow">
-                    Finalização da inscrição
-                </p>
+                <p class="checkout-heading__eyebrow">Finalização da inscrição</p>
 
                 {% if is_approved %}
                     <h1>Inscrição confirmada</h1>
-
-                    <p>
-                        O pedido foi confirmado com sucesso.
-                    </p>
+                    <p>O pedido foi confirmado com sucesso.</p>
                 {% elif is_expired %}
                     <h1>Prazo encerrado</h1>
-
-                    <p>
-                        A reserva expirou antes da confirmação
-                        do pagamento.
-                    </p>
+                    <p>A reserva expirou antes da confirmação do pagamento.</p>
                 {% else %}
                     <h1>Pagamento por PIX</h1>
-
-                    <p>
-                        Escaneie o QR Code ou copie o código PIX
-                        para concluir o pedido.
-                    </p>
+                    <p>Escaneie o QR Code ou copie o código PIX para concluir o pedido.</p>
                 {% endif %}
             </header>
 
-            <ol
-                class="checkout-steps"
-                aria-label="Etapas da inscrição"
-            >
-                <li
-                    class="
-                        checkout-steps__item
-                        checkout-steps__item--done
-                    "
-                >
+            <ol class="checkout-steps" aria-label="Etapas da inscrição">
+                <li class="checkout-steps__item checkout-steps__item--done">
                     <span aria-hidden="true">✓</span>
                     Ingressos
                 </li>
 
-                <li
-                    class="
-                        checkout-steps__item
-                        checkout-steps__item--done
-                    "
-                >
+                <li class="checkout-steps__item checkout-steps__item--done">
                     <span aria-hidden="true">✓</span>
                     Participantes
                 </li>
 
                 <li
-                    class="
-                        checkout-steps__item
-                        {% if is_approved %}
-                            checkout-steps__item--done
-                        {% else %}
-                            checkout-steps__item--active
-                        {% endif %}
-                    "
-                    {% if not is_approved %}
-                        aria-current="step"
-                    {% endif %}
+                    class="checkout-steps__item {% if is_approved %}checkout-steps__item--done{% else %}checkout-steps__item--active{% endif %}"
+                    {% if not is_approved %}aria-current="step"{% endif %}
                 >
                     <span>
                         {% if is_approved %}
@@ -130,17 +73,8 @@
             <div class="payment-layout">
                 <section class="payment-main">
                     {% if is_approved %}
-                        <div
-                            class="payment-state payment-state--success"
-                            role="status"
-                        >
-                            <span
-                                class="payment-state__icon"
-                                aria-hidden="true"
-                            >
-                                ✓
-                            </span>
-
+                        <div class="payment-state payment-state--success" role="status">
+                            <span class="payment-state__icon" aria-hidden="true">✓</span>
                             <div>
                                 <h2>
                                     {% if is_free %}
@@ -149,51 +83,91 @@
                                         Pagamento aprovado
                                     {% endif %}
                                 </h2>
-
                                 <p>
                                     Pedido {{ order.public_code }}.
-                                    As credenciais serão
-                                    disponibilizadas nas próximas
-                                    etapas do sistema.
+                                    As credenciais serão disponibilizadas nas próximas etapas do sistema.
                                 </p>
                             </div>
                         </div>
 
-                        <a
-                            class="button button--primary"
-                            href="{% url 'accounts:dashboard' %}"
-                        >
+                        <a class="button button--primary" href="{% url 'accounts:dashboard' %}">
                             Acessar minha conta
                         </a>
 
-                    {% elif is_expired %}
-                        <div
-                            class="payment-state payment-state--expired"
-                            role="alert"
-                        >
-                            <span
-                                class="payment-state__icon"
-                                aria-hidden="true"
-                            >
-                                !
-                            </span>
-
+                    {% elif is_charged_back %}
+                        <div class="payment-state payment-state--rejected" role="alert">
+                            <span class="payment-state__icon" aria-hidden="true">!</span>
                             <div>
-                                <h2>Reserva expirada</h2>
-
+                                <h2>Pagamento contestado</h2>
                                 <p>
-                                    O PIX não deve mais ser pago.
-                                    Inicie uma nova inscrição para
-                                    verificar a disponibilidade
-                                    atual.
+                                    O provedor informou uma contestação deste pagamento.
+                                    A inscrição está suspensa para análise financeira.
                                 </p>
                             </div>
                         </div>
 
-                        <a
-                            class="button button--primary"
-                            href="{% url 'events:public-detail' event_id=order.event_id %}"
-                        >
+                        <a class="button button--primary" href="{% url 'accounts:dashboard' %}">
+                            Acessar minha conta
+                        </a>
+
+                    {% elif is_refunded %}
+                        <div class="payment-state payment-state--refunded" role="status">
+                            <span class="payment-state__icon" aria-hidden="true">↩</span>
+                            <div>
+                                <h2>Pagamento reembolsado</h2>
+                                <p>
+                                    O valor deste pedido foi devolvido.
+                                    A inscrição não está mais ativa.
+                                </p>
+                            </div>
+                        </div>
+
+                        <a class="button button--primary" href="{% url 'accounts:dashboard' %}">
+                            Acessar minha conta
+                        </a>
+
+                    {% elif is_canceled %}
+                        <div class="payment-state payment-state--canceled" role="alert">
+                            <span class="payment-state__icon" aria-hidden="true">×</span>
+                            <div>
+                                <h2>Pagamento cancelado</h2>
+                                <p>A cobrança foi cancelada e não deve mais ser paga.</p>
+                            </div>
+                        </div>
+
+                        <a class="button button--primary" href="{% url 'events:public-detail' event_id=order.event_id %}">
+                            Voltar ao evento
+                        </a>
+
+                    {% elif is_rejected or has_payment_error %}
+                        <div class="payment-state payment-state--rejected" role="alert">
+                            <span class="payment-state__icon" aria-hidden="true">!</span>
+                            <div>
+                                <h2>Pagamento não concluído</h2>
+                                <p>
+                                    Não foi possível confirmar esta tentativa.
+                                    Você pode retornar e iniciar uma nova tentativa enquanto houver disponibilidade.
+                                </p>
+                            </div>
+                        </div>
+
+                        <a class="button button--primary" href="{% url 'registrations:participants' public_code=order.public_code %}">
+                            Tentar novamente
+                        </a>
+
+                    {% elif is_expired %}
+                        <div class="payment-state payment-state--expired" role="alert">
+                            <span class="payment-state__icon" aria-hidden="true">!</span>
+                            <div>
+                                <h2>Reserva expirada</h2>
+                                <p>
+                                    O PIX não deve mais ser pago.
+                                    Inicie uma nova inscrição para verificar a disponibilidade atual.
+                                </p>
+                            </div>
+                        </div>
+
+                        <a class="button button--primary" href="{% url 'events:public-detail' event_id=order.event_id %}">
                             Voltar ao evento
                         </a>
 
@@ -205,23 +179,13 @@
                         >
                             <div>
                                 <p>Tempo para pagar</p>
-
-                                <strong
-                                    data-reservation-timer-output
-                                    aria-hidden="true"
-                                >
-                                    Calculando…
-                                </strong>
+                                <strong data-reservation-timer-output aria-hidden="true">Calculando…</strong>
                             </div>
-
-                            <p>
-                                O pagamento precisa ser concluído
-                                antes do fim da reserva.
-                            </p>
+                            <p>O pagamento precisa ser concluído antes do fim da reserva.</p>
                         </div>
 
-                        <div class="pix-payment">
-                            <div class="pix-payment__qr">
+                        <div class="pix-payment__qr">
+                            {% if qr_code_data_uri %}
                                 <p>Escaneie com o aplicativo do banco</p>
 
                                 <div class="pix-payment__image">
@@ -232,112 +196,79 @@
                                         height="320"
                                     >
                                 </div>
-                            </div>
-
-                            <div class="pix-payment__copy">
-                                <p>Ou use o PIX copia e cola</p>
-
-                                <label for="pix-copy-code">
-                                    Código PIX
-                                </label>
-
-                                <textarea
-                                    id="pix-copy-code"
-                                    rows="5"
-                                    readonly
-                                    data-pix-code
-                                >{{ payment.pix_copy_paste }}</textarea>
-
-                                <button
-                                    class="button button--primary"
-                                    type="button"
-                                    data-copy-pix
+                            {% else %}
+                                <div
+                                    class="payment-state payment-state--waiting"
+                                    role="status"
                                 >
-                                    Copiar código PIX
-                                </button>
+                                    <div>
+                                        <strong>Cobrança de teste criada</strong>
 
-                                <p
-                                    class="pix-payment__feedback"
-                                    data-copy-feedback
-                                    aria-live="polite"
-                                ></p>
+                                        <p>
+                                            O sandbox do Mercado Pago atualizará
+                                            automaticamente o pagamento.
+                                        </p>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
 
-                                {% if payment.checkout_url %}
-                                    <a
-                                        class="pix-payment__external"
-                                        href="{{ payment.checkout_url }}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        Abrir instruções do Mercado Pago
-                                    </a>
-                                {% endif %}
-                            </div>
+                        <div class="pix-payment__copy">
+                            <p>Ou use o PIX copia e cola</p>
+                            <label for="pix-copy-code">Código PIX</label>
+                            <textarea id="pix-copy-code" rows="5" readonly data-pix-code>{{ payment.pix_copy_paste }}</textarea>
+
+                            <button class="button button--primary" type="button" data-copy-pix>
+                                Copiar código PIX
+                            </button>
+
+                            <p class="pix-payment__feedback" data-copy-feedback aria-live="polite"></p>
+
+                            {% if payment.checkout_url %}
+                                <a
+                                    class="pix-payment__external"
+                                    href="{{ payment.checkout_url }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    Abrir instruções do Mercado Pago
+                                </a>
+                            {% endif %}
                         </div>
 
                         <p class="payment-pending-note">
-                            Após o pagamento, a confirmação será
-                            atualizada automaticamente pelo webhook
-                            na próxima fase.
+                            Após o pagamento, esta página será atualizada automaticamente
+                            assim que o Mercado Pago confirmar a transação.
                         </p>
 
                     {% else %}
-                        <div
-                            class="payment-state payment-state--waiting"
-                            role="status"
-                        >
-                            <span
-                                class="payment-state__icon"
-                                aria-hidden="true"
-                            >
-                                …
-                            </span>
-
+                        <div class="payment-state payment-state--waiting" role="status">
+                            <span class="payment-state__icon" aria-hidden="true">…</span>
                             <div>
-                                <h2>
-                                    Não foi possível exibir o PIX
-                                </h2>
-
+                                <h2>Não foi possível exibir o PIX</h2>
                                 <p>
-                                    Volte aos participantes e tente
-                                    continuar novamente. A operação
-                                    é idempotente e não criará uma
-                                    cobrança duplicada.
+                                    Volte aos participantes e tente continuar novamente.
+                                    A operação é idempotente e não criará uma cobrança duplicada.
                                 </p>
                             </div>
                         </div>
 
-                        <a
-                            class="button button--primary"
-                            href="{% url 'registrations:participants' public_code=order.public_code %}"
-                        >
+                        <a class="button button--primary" href="{% url 'registrations:participants' public_code=order.public_code %}">
                             Voltar aos participantes
                         </a>
                     {% endif %}
                 </section>
 
                 <aside class="payment-summary">
-                    <p class="order-summary__eyebrow">
-                        Resumo do pedido
-                    </p>
-
+                    <p class="order-summary__eyebrow">Resumo do pedido</p>
                     <h2>{{ order.event.title }}</h2>
-
-                    <p class="payment-summary__code">
-                        {{ order.public_code }}
-                    </p>
+                    <p class="payment-summary__code">{{ order.public_code }}</p>
 
                     <div class="payment-summary__items">
                         {% for item in order_items %}
                             <div>
-                                <span>
-                                    {{ item.quantity }}×
-                                    {{ item.ticket_type.name }}
-                                </span>
-
-                                <strong>
-                                    R$ {{ item.subtotal|floatformat:2 }}
-                                </strong>
+                                <span>{{ item.quantity }}× {{ item.ticket_type.name }}</span>
+                                <strong>R$ {{ item.subtotal|floatformat:2 }}</strong>
                             </div>
                         {% endfor %}
                     </div>
@@ -345,23 +276,17 @@
                     <dl class="payment-summary__totals">
                         <div>
                             <dt>Subtotal</dt>
-                            <dd>
-                                R$ {{ order.subtotal|floatformat:2 }}
-                            </dd>
+                            <dd>R$ {{ order.subtotal|floatformat:2 }}</dd>
                         </div>
 
                         <div>
                             <dt>Taxa</dt>
-                            <dd>
-                                R$ {{ order.service_fee|floatformat:2 }}
-                            </dd>
+                            <dd>R$ {{ order.service_fee|floatformat:2 }}</dd>
                         </div>
 
                         <div class="payment-summary__total">
                             <dt>Total</dt>
-                            <dd>
-                                R$ {{ order.total|floatformat:2 }}
-                            </dd>
+                            <dd>R$ {{ order.total|floatformat:2 }}</dd>
                         </div>
                     </dl>
                 </aside>
@@ -370,15 +295,7 @@
     </div>
 {% endblock %}
 
-
 {% block extra_js %}
-    <script
-        src="{% static 'js/checkout-timer.js' %}"
-        defer
-    ></script>
-
-    <script
-        src="{% static 'js/payment.js' %}"
-        defer
-    ></script>
+    <script src="{% static 'js/checkout-timer.js' %}" defer></script>
+    <script src="{% static 'js/payment.js' %}" defer></script>
 {% endblock %}

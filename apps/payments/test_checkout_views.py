@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -226,6 +226,93 @@ class PaymentCheckoutViewTests(TestCase):
             order_id=self.order.id,
             buyer=self.buyer,
         )
+
+    @override_settings(MARKETPLACE_PAYMENTS_ENABLED=True)
+    @patch(
+        "apps.registrations.views."
+        "initiate_order_payment"
+    )
+    def test_marketplace_continue_redirects_to_payer_details(
+        self,
+        payment_service,
+    ):
+        self.client.force_login(self.buyer)
+
+        response = self.client.post(
+            self.participant_url,
+            self.participant_post_data(),
+        )
+
+        self.assertRedirects(
+            response,
+            reverse(
+                "payments:payer-details",
+                kwargs={"public_code": self.order.public_code},
+            ),
+            fetch_redirect_response=False,
+        )
+        payment_service.assert_not_called()
+
+    @override_settings(MARKETPLACE_PAYMENTS_ENABLED=True)
+    @patch("apps.payments.views.initiate_order_payment")
+    def test_payer_form_starts_payment_with_validated_cpf(
+        self,
+        payment_service,
+    ):
+        payment_service.return_value = SimpleNamespace(
+            is_free=False,
+        )
+        self.client.force_login(self.buyer)
+
+        response = self.client.post(
+            reverse(
+                "payments:payer-details",
+                kwargs={"public_code": self.order.public_code},
+            ),
+            {
+                "full_name": "Maria da Silva",
+                "document_number": "529.982.247-25",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            self.payment_url,
+            fetch_redirect_response=False,
+        )
+        payment_service.assert_called_once_with(
+            order_id=self.order.id,
+            buyer=self.buyer,
+            payer_data={
+                "first_name": "Maria",
+                "last_name": "da Silva",
+                "document_type": "CPF",
+                "document_number": "52998224725",
+            },
+        )
+
+    @override_settings(MARKETPLACE_PAYMENTS_ENABLED=True)
+    @patch("apps.payments.views.initiate_order_payment")
+    def test_invalid_payer_cpf_does_not_start_payment(
+        self,
+        payment_service,
+    ):
+        self.client.force_login(self.buyer)
+
+        response = self.client.post(
+            reverse(
+                "payments:payer-details",
+                kwargs={"public_code": self.order.public_code},
+            ),
+            {
+                "full_name": "Maria da Silva",
+                "document_number": "111.111.111-11",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Informe um CPF válido")
+        payment_service.assert_not_called()
 
     def test_payment_page_displays_pix(self):
         self.create_pending_payment()

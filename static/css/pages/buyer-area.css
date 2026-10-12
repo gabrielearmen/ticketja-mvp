@@ -1,0 +1,213 @@
+.buyer-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.buyer-summary__item {
+    padding: 1.15rem 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    background: var(--color-white);
+}
+
+.buyer-summary__item strong {
+    display: block;
+    color: var(--color-orange-700);
+    font-size: 1.75rem;
+    line-height: 1;
+}
+
+.buyer-summary__item span {
+    display: block;
+    margin-top: 0.45rem;
+    color: var(--color-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.buyer-section-heading {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.buyer-section-heading p {
+    margin: 0.4rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.9rem;
+}
+
+.buyer-orders {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.25rem;
+}
+
+.buyer-order-card {
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: 1rem;
+    background: var(--color-white);
+    transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+}
+
+.buyer-order-card:hover {
+    border-color: var(--color-orange-300);
+    box-shadow: 0 0.8rem 2rem rgb(24 24 27 / 7%);
+    transform: translateY(-2px);
+}
+
+.buyer-order-card__top {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.buyer-order-card__code {
+    margin: 0 0 0.35rem;
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.buyer-order-card h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    letter-spacing: -0.025em;
+}
+
+.buyer-status {
+    flex-shrink: 0;
+    padding: 0.42rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 850;
+}
+
+.buyer-status--in-progress {
+    color: #9a3412;
+    background: #ffedd5;
+}
+
+.buyer-status--paid {
+    color: #166534;
+    background: #dcfce7;
+}
+
+.buyer-status--closed {
+    color: #52525b;
+    background: #f4f4f5;
+}
+
+.buyer-order-card__details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 1.25rem 0 0;
+}
+
+.buyer-order-card__details div {
+    min-width: 0;
+}
+
+.buyer-order-card__details dt {
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.buyer-order-card__details dd {
+    margin: 0.25rem 0 0;
+    overflow-wrap: anywhere;
+    font-size: 0.9rem;
+    font-weight: 750;
+}
+
+.buyer-progress {
+    margin-top: 1.25rem;
+}
+
+.buyer-progress__heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.45rem;
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 750;
+}
+
+.buyer-progress progress {
+    width: 100%;
+    height: 0.45rem;
+    overflow: hidden;
+    border: 0;
+    border-radius: 999px;
+    background: #f4f4f5;
+}
+
+.buyer-progress progress::-webkit-progress-bar {
+    border-radius: 999px;
+    background: #f4f4f5;
+}
+
+.buyer-progress progress::-webkit-progress-value {
+    border-radius: 999px;
+    background: var(--color-orange-600);
+}
+
+.buyer-progress progress::-moz-progress-bar {
+    border-radius: 999px;
+    background: var(--color-orange-600);
+}
+
+.buyer-order-card__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.buyer-order-card__footer > span {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+}
+
+@media (max-width: 48rem) {
+    .buyer-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .buyer-order-card__details {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 36rem) {
+    .buyer-order-card__top,
+    .buyer-order-card__footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .buyer-status {
+        align-self: flex-start;
+    }
+
+    .buyer-order-card__footer .button {
+        width: 100%;
+    }
+}

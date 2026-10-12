@@ -248,3 +248,27 @@
         margin-inline: auto;
     }
 }
+
+.payment-state--refunded {
+    border-color: #bfdbfe;
+    color: #1e40af;
+    background: #eff6ff;
+}
+
+.payment-state--refunded .payment-state__icon {
+    color: var(--color-white);
+    background: #2563eb;
+}
+
+.payment-state--canceled,
+.payment-state--rejected {
+    border-color: #fed7aa;
+    color: #9a3412;
+    background: #fff7ed;
+}
+
+.payment-state--canceled .payment-state__icon,
+.payment-state--rejected .payment-state__icon {
+    color: var(--color-white);
+    background: #c2410c;
+}

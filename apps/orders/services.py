@@ -8,6 +8,12 @@ from django.core.exceptions import ValidationError
 from django.db import connection, transaction
 from django.utils import timezone
 
+from apps.marketplace.fees import (
+    calculate_marketplace_fee,
+    effective_fee_policy,
+)
+from apps.marketplace.models import FeeBearer
+
 from .availability import (
     lock_ticket_lot_and_calculate_availability,
     validate_reservation_quantity,
@@ -266,6 +272,41 @@ def create_reservation_order(
     item_subtotal = unit_price * validated_quantity
 
     service_fee = MONEY_ZERO
+    platform_fee = MONEY_ZERO
+    fee_bearer = ""
+    fee_policy_reference = None
+
+    if (
+        settings.MARKETPLACE_PAYMENTS_ENABLED
+        and item_subtotal > MONEY_ZERO
+    ):
+        fee_policy = effective_fee_policy(
+            at=reference_time,
+            for_update=True,
+        )
+
+        if fee_policy is None:
+            raise ValidationError(
+                {
+                    "payment": (
+                        "As inscrições estão temporariamente indisponíveis: "
+                        "a política de comissão não foi configurada."
+                    )
+                }
+            )
+
+        fee_quote = calculate_marketplace_fee(
+            policy=fee_policy,
+            ticket_subtotal=item_subtotal,
+            ticket_quantity=validated_quantity,
+        )
+        platform_fee = fee_quote.platform_fee
+        fee_bearer = fee_quote.fee_bearer
+        fee_policy_reference = fee_policy.id
+
+        if fee_bearer == FeeBearer.BUYER:
+            service_fee = platform_fee
+
     order_total = item_subtotal + service_fee
 
     reservation_expires_at = (
@@ -283,6 +324,9 @@ def create_reservation_order(
         status=OrderStatus.AWAITING_PAYMENT,
         subtotal=item_subtotal,
         service_fee=service_fee,
+        platform_fee=platform_fee,
+        fee_bearer=fee_bearer,
+        fee_policy_reference=fee_policy_reference,
         total=order_total,
         reservation_expires_at=reservation_expires_at,
     )

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Dados do pagador — {{ order.public_code }} — TicketJá{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pages/checkout.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pages/payment.css' %}">
+{% endblock %}
+
+{% block content %}
+    <div class="checkout-page">
+        <div class="container payment-container">
+            <nav class="checkout-breadcrumb" aria-label="Navegação estrutural">
+                <a href="{% url 'core:home' %}#eventos">Eventos</a>
+                <span aria-hidden="true">/</span>
+                <a href="{% url 'registrations:participants' public_code=order.public_code %}">
+                    Participantes
+                </a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Pagador</span>
+            </nav>
+
+            <header class="checkout-heading">
+                <p class="checkout-heading__eyebrow">Finalização da inscrição</p>
+                <h1>Dados do pagador</h1>
+                <p>
+                    Informe os dados da pessoa que fará o PIX. Ela pode ser
+                    diferente dos participantes inscritos.
+                </p>
+            </header>
+
+            <ol class="checkout-steps" aria-label="Etapas da inscrição">
+                <li class="checkout-steps__item checkout-steps__item--done">
+                    <span aria-hidden="true">✓</span> Ingressos
+                </li>
+                <li class="checkout-steps__item checkout-steps__item--done">
+                    <span aria-hidden="true">✓</span> Participantes
+                </li>
+                <li class="checkout-steps__item checkout-steps__item--active" aria-current="step">
+                    <span>3</span> Pagamento
+                </li>
+            </ol>
+
+            <div class="checkout-layout checkout-layout--single">
+                <section class="checkout-card">
+                    <form method="post" class="checkout-form" novalidate>
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                            <div class="checkout-alert checkout-alert--error" role="alert">
+                                {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+                            </div>
+                        {% endif %}
+
+                        <div class="checkout-field">
+                            <label for="{{ form.full_name.id_for_label }}">
+                                {{ form.full_name.label }}
+                            </label>
+                            {{ form.full_name }}
+                            {% for error in form.full_name.errors %}
+                                <p class="checkout-field-errors" role="alert">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+
+                        <div class="checkout-field">
+                            <label for="{{ form.document_number.id_for_label }}">
+                                {{ form.document_number.label }}
+                            </label>
+                            {{ form.document_number }}
+                            <p class="checkout-field__hint">
+                                O CPF será criptografado e utilizado somente no processamento financeiro.
+                            </p>
+                            {% for error in form.document_number.errors %}
+                                <p class="checkout-field-errors" role="alert">{{ error }}</p>
+                            {% endfor %}
+                        </div>
+
+                        <div class="checkout-field">
+                            <span>E-mail da conta</span>
+                            <strong>{{ buyer_email }}</strong>
+                            <p class="checkout-field__hint">
+                                A confirmação será vinculada à sua conta TicketJá.
+                            </p>
+                        </div>
+
+                        <footer class="checkout-form__footer">
+                            <a
+                                class="button button--secondary"
+                                href="{% url 'registrations:participants' public_code=order.public_code %}"
+                            >
+                                Voltar
+                            </a>
+                            <button class="button button--primary" type="submit">
+                                Gerar PIX
+                            </button>
+                        </footer>
+                    </form>
+                </section>
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -2,9 +2,14 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase
+from django.test import (
+    SimpleTestCase,
+    TestCase,
+    override_settings,
+)
 from django.utils import timezone
 
 from apps.events.models import (
@@ -42,6 +47,9 @@ from .models import (
     PaymentStatus,
 )
 from .services import initiate_order_payment
+
+
+PAYER_TEST_KEY = Fernet.generate_key().decode("ascii")
 
 
 class FakePixGateway(PaymentGateway):
@@ -92,6 +100,7 @@ class FakePixGateway(PaymentGateway):
 
 
 class MercadoPagoGatewayTests(SimpleTestCase):
+    @override_settings(MERCADO_PAGO_TEST_MODE=True)
     def test_creates_pix_with_idempotency_and_qr_code(self):
         gateway = MercadoPagoGateway(
             access_token="APP_USR-TEST-TOKEN",
@@ -102,32 +111,19 @@ class MercadoPagoGatewayTests(SimpleTestCase):
         )
 
         provider_response = {
-            "id": "ORD-123",
-            "status": "action_required",
-            "status_detail": "waiting_transfer",
-            "transactions": {
-                "payments": [
-                    {
-                        "id": "PAY-123",
-                        "status": "action_required",
-                        "status_detail": (
-                            "waiting_transfer"
-                        ),
-                        "amount": "100.00",
-                        "payment_method": {
-                            "id": "pix",
-                            "type": "bank_transfer",
-                            "ticket_url": (
-                                "https://www.mercadopago.com.br/"
-                                "sandbox/payments/123"
-                            ),
-                            "qr_code": "PIX-COPIA-E-COLA",
-                            "qr_code_base64": (
-                                "IMAGEM-BASE64"
-                            ),
-                        },
-                    }
-                ]
+            "id": "PAY-123",
+            "status": "pending",
+            "status_detail": "pending_waiting_transfer",
+            "transaction_amount": 100.0,
+            "point_of_interaction": {
+                "transaction_data": {
+                    "ticket_url": (
+                        "https://www.mercadopago.com.br/"
+                        "sandbox/payments/123"
+                    ),
+                    "qr_code": "PIX-COPIA-E-COLA",
+                    "qr_code_base64": "",
+                }
             },
         }
 
@@ -141,8 +137,12 @@ class MercadoPagoGatewayTests(SimpleTestCase):
             external_reference="TJP-TESTE123",
             description="Pedido de teste",
             amount=Decimal("100.00"),
-            platform_fee=Decimal("0.00"),
+            platform_fee=Decimal("7.50"),
             payer_email="comprador@example.com",
+            payer_first_name="Maria",
+            payer_last_name="Silva",
+            payer_document_type="CPF",
+            payer_document_number="52998224725",
             expires_at=(
                 timezone.now()
                 + timedelta(minutes=30)
@@ -168,24 +168,67 @@ class MercadoPagoGatewayTests(SimpleTestCase):
         )
         self.assertEqual(
             request_kwargs["path"],
-            "/v1/orders",
+            "/v1/payments",
         )
         self.assertEqual(
             request_kwargs["idempotency_key"],
             request_data.idempotency_key,
         )
         self.assertEqual(
-            request_kwargs["payload"]["total_amount"],
-            "100.00",
+            request_kwargs["payload"]["transaction_amount"],
+            100.0,
+        )
+        self.assertEqual(
+            request_kwargs["payload"]["application_fee"],
+            7.5,
+        )
+        self.assertEqual(
+            request_kwargs["payload"]["payer"]["first_name"],
+            "APRO",
+        )
+        self.assertEqual(
+            request_kwargs["payload"]["payer"]["identification"],
+            {"type": "CPF", "number": "52998224725"},
         )
         self.assertEqual(
             result.provider_order_id,
-            "ORD-123",
+            "PAY-123",
         )
         self.assertEqual(
             result.pix_copy_paste,
             "PIX-COPIA-E-COLA",
         )
+        self.assertEqual(
+            result.pix_qr_code_base64,
+            "",
+        )
+
+    def test_snapshot_separates_provider_fee_from_platform_fee(self):
+        gateway = MercadoPagoGateway(
+            access_token="APP_USR-TEST-TOKEN",
+            api_base_url="https://api.mercadopago.com",
+            timeout_seconds=15,
+        )
+
+        snapshot = gateway._snapshot_from_payment(
+            {
+                "id": "PAY-123",
+                "status": "approved",
+                "status_detail": "accredited",
+                "transaction_amount": 108,
+                "external_reference": "TJP-TESTE123",
+                "fee_details": [
+                    {"type": "mercadopago_fee", "amount": 4.50},
+                    {"type": "application_fee", "amount": 8.00},
+                ],
+                "transaction_details": {
+                    "net_received_amount": 95.50,
+                },
+            }
+        )
+
+        self.assertEqual(snapshot.provider_fee, Decimal("4.50"))
+        self.assertEqual(snapshot.net_amount, Decimal("95.50"))
 
 
 class PixPaymentServiceTests(TestCase):
@@ -324,6 +367,61 @@ class PixPaymentServiceTests(TestCase):
         self.assertEqual(
             len(gateway.create_calls),
             1,
+        )
+
+    @override_settings(
+        MARKETPLACE_TOKEN_ENCRYPTION_KEYS=PAYER_TEST_KEY,
+    )
+    def test_payer_snapshot_is_encrypted_and_sent_to_gateway(self):
+        order = self.create_ready_order()
+        gateway = FakePixGateway()
+
+        result = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            gateway=gateway,
+            payer_data={
+                "first_name": "Maria",
+                "last_name": "Silva",
+                "document_type": "CPF",
+                "document_number": "529.982.247-25",
+            },
+        )
+
+        result.payment.refresh_from_db()
+        request = gateway.create_calls[0]
+
+        self.assertNotIn(
+            "52998224725",
+            result.payment.payer_document_ciphertext,
+        )
+        self.assertEqual(
+            result.payment.payer_document_last4,
+            "4725",
+        )
+        self.assertEqual(request.payer_first_name, "Maria")
+        self.assertEqual(request.payer_last_name, "Silva")
+        self.assertEqual(
+            request.payer_document_number,
+            "52998224725",
+        )
+
+    @override_settings(
+        MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_TOKEN_ENCRYPTION_KEYS=PAYER_TEST_KEY,
+    )
+    def test_marketplace_payment_requires_payer_details(self):
+        order = self.create_ready_order()
+
+        with self.assertRaises(ValidationError):
+            initiate_order_payment(
+                order_id=order.id,
+                buyer=self.buyer,
+                gateway=FakePixGateway(),
+            )
+
+        self.assertFalse(
+            Payment.objects.filter(order=order).exists()
         )
 
     def test_repeated_request_does_not_create_second_pix(self):

@@ -3,7 +3,7 @@
 
 
 {% block title %}
-    Minha conta — TicketJá
+    Minhas inscrições — TicketJá
 {% endblock %}
 
 
@@ -12,11 +12,18 @@
         rel="stylesheet"
         href="{% static 'css/pages/dashboard.css' %}"
     >
+    <link
+        rel="stylesheet"
+        href="{% static 'css/pages/buyer-area.css' %}"
+    >
 {% endblock %}
 
 
 {% block content %}
-    <section class="dashboard-page" aria-labelledby="account-title">
+    <section
+        class="dashboard-page"
+        aria-labelledby="buyer-area-title"
+    >
         <div class="container">
             <header class="dashboard-header">
                 <div>
@@ -24,12 +31,12 @@
                         Área do comprador
                     </p>
 
-                    <h1 id="account-title">
-                        Olá, {{ request.user.first_name|default:"participante" }}.
+                    <h1 id="buyer-area-title">
+                        Minhas inscrições
                     </h1>
 
                     <p class="dashboard-header__description">
-                        Acompanhe suas compras e inscrições.
+                        Acompanhe seus pedidos e continue de onde parou.
                     </p>
                 </div>
 
@@ -37,18 +44,142 @@
                     class="button button--primary"
                     href="{% url 'core:home' %}#eventos"
                 >
-                    Explorar eventos
+                    Encontrar eventos
                 </a>
             </header>
 
+            <section
+                class="buyer-summary"
+                aria-label="Resumo das inscrições"
+            >
+                <article class="buyer-summary__item">
+                    <strong>{{ orders_in_progress }}</strong>
+                    <span>Em andamento</span>
+                </article>
+
+                <article class="buyer-summary__item">
+                    <strong>{{ paid_orders }}</strong>
+                    <span>Confirmadas</span>
+                </article>
+
+                <article class="buyer-summary__item">
+                    <strong>{{ closed_orders }}</strong>
+                    <span>Encerradas</span>
+                </article>
+            </section>
+
             <div class="dashboard-grid">
                 <section class="dashboard-card dashboard-card--main">
-                    <h2>Meus pedidos</h2>
-
-                    {% if orders %}
+                    <div class="buyer-section-heading">
                         <div>
-                            {% for order in orders %}
-                                <p>{{ order }}</p>
+                            <h2>Pedidos e inscrições</h2>
+
+                            <p>
+                                Somente os pedidos vinculados à sua conta
+                                são exibidos aqui.
+                            </p>
+                        </div>
+                    </div>
+
+                    {% if order_cards %}
+                        <div class="buyer-orders">
+                            {% for card in order_cards %}
+                                <article class="buyer-order-card">
+                                    <div class="buyer-order-card__top">
+                                        <div>
+                                            <p class="buyer-order-card__code">
+                                                Pedido {{ card.order.public_code }}
+                                            </p>
+
+                                            <h3>
+                                                {{ card.order.event.title }}
+                                            </h3>
+                                        </div>
+
+                                        <span
+                                            class="
+                                                buyer-status
+                                                buyer-status--{{ card.state }}
+                                            "
+                                        >
+                                            {{ card.status_label }}
+                                        </span>
+                                    </div>
+
+                                    <dl class="buyer-order-card__details">
+                                        <div>
+                                            <dt>Data do evento</dt>
+                                            <dd>
+                                                {{ card.order.event.event_datetime|date:"d/m/Y" }}
+                                                às
+                                                {{ card.order.event.event_datetime|time:"H:i" }}
+                                            </dd>
+                                        </div>
+
+                                        <div>
+                                            <dt>Local</dt>
+                                            <dd>
+                                                {{ card.order.event.city }}
+                                                —
+                                                {{ card.order.event.state }}
+                                            </dd>
+                                        </div>
+
+                                        <div>
+                                            <dt>Participantes</dt>
+                                            <dd>
+                                                {{ card.completed_participants }}
+                                                de
+                                                {{ card.expected_participants }}
+                                                preenchidos
+                                            </dd>
+                                        </div>
+
+                                        <div>
+                                            <dt>Total</dt>
+                                            <dd>
+                                                R$ {{ card.order.total|floatformat:2 }}
+                                            </dd>
+                                        </div>
+                                    </dl>
+
+                                    {% if card.state == "in-progress" %}
+                                        <div class="buyer-progress">
+                                            <div class="buyer-progress__heading">
+                                                <span>
+                                                    Preenchimento dos participantes
+                                                </span>
+
+                                                <strong>
+                                                    {{ card.completed_participants }}/{{ card.expected_participants }}
+                                                </strong>
+                                            </div>
+
+                                            <progress
+                                                value="{{ card.completed_participants }}"
+                                                max="{{ card.expected_participants|default:1 }}"
+                                            >
+                                                {{ card.completed_participants }}
+                                                de
+                                                {{ card.expected_participants }}
+                                            </progress>
+                                        </div>
+                                    {% endif %}
+
+                                    <footer class="buyer-order-card__footer">
+                                        <span>
+                                            Criado em
+                                            {{ card.order.created_at|date:"d/m/Y H:i" }}
+                                        </span>
+
+                                        <a
+                                            class="button button--primary"
+                                            href="{{ card.action_url }}"
+                                        >
+                                            {{ card.action_label }}
+                                        </a>
+                                    </footer>
+                                </article>
                             {% endfor %}
                         </div>
                     {% else %}
@@ -61,11 +192,13 @@
                                     →
                                 </div>
 
-                                <h3>Você ainda não possui pedidos</h3>
+                                <h3>
+                                    Você ainda não possui inscrições
+                                </h3>
 
                                 <p>
-                                    Quando uma compra for realizada,
-                                    ela aparecerá nesta área.
+                                    Quando você iniciar uma inscrição,
+                                    o pedido aparecerá nesta página.
                                 </p>
 
                                 <a

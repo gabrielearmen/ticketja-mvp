@@ -49,6 +49,7 @@ class PaymentStatus(models.TextChoices):
     REJECTED = "rejeitado", "Rejeitado"
     CANCELED = "cancelado", "Cancelado"
     REFUNDED = "reembolsado", "Reembolsado"
+    CHARGED_BACK = "chargeback", "Pagamento contestado"
     EXPIRED = "expirado", "Expirado"
     ERROR = "erro", "Erro"
 
@@ -152,6 +153,42 @@ class Payment(models.Model):
         default=MONEY_ZERO,
     )
 
+    payer_email = models.EmailField(
+        verbose_name="e-mail do pagador",
+        blank=True,
+    )
+
+    payer_first_name = models.CharField(
+        verbose_name="nome do pagador",
+        max_length=100,
+        blank=True,
+    )
+
+    payer_last_name = models.CharField(
+        verbose_name="sobrenome do pagador",
+        max_length=150,
+        blank=True,
+    )
+
+    payer_document_type = models.CharField(
+        verbose_name="tipo de documento do pagador",
+        max_length=10,
+        blank=True,
+    )
+
+    payer_document_ciphertext = models.TextField(
+        verbose_name="documento do pagador criptografado",
+        blank=True,
+        editable=False,
+    )
+
+    payer_document_last4 = models.CharField(
+        verbose_name="últimos dígitos do documento",
+        max_length=4,
+        blank=True,
+        editable=False,
+    )
+
     provider_fee = models.DecimalField(
         verbose_name="tarifa do provedor",
         max_digits=14,
@@ -247,6 +284,29 @@ class Payment(models.Model):
     refunded_at = models.DateTimeField(
         verbose_name="reembolsado em",
         null=True,
+        blank=True,
+    )
+
+    charged_back_at = models.DateTimeField(
+        verbose_name="contestado em",
+        null=True,
+        blank=True,
+    )
+
+    reconciliation_attempts = models.PositiveIntegerField(
+        verbose_name="tentativas de conciliação",
+        default=0,
+    )
+
+    last_reconciled_at = models.DateTimeField(
+        verbose_name="última conciliação em",
+        null=True,
+        blank=True,
+    )
+
+    last_reconciliation_error = models.CharField(
+        verbose_name="última falha de conciliação",
+        max_length=500,
         blank=True,
     )
 
@@ -368,6 +428,15 @@ class Payment(models.Model):
                     | models.Q(refunded_at__isnull=False)
                 ),
                 name="pay_refunded_timestamp",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(
+                        status=PaymentStatus.CHARGED_BACK,
+                    )
+                    | models.Q(charged_back_at__isnull=False)
+                ),
+                name="pay_chargeback_timestamp",
             ),
             models.UniqueConstraint(
                 fields=(
@@ -510,6 +579,11 @@ class Payment(models.Model):
                 self.refunded_at,
                 "Informe quando o pagamento foi reembolsado.",
             ),
+            PaymentStatus.CHARGED_BACK: (
+                "charged_back_at",
+                self.charged_back_at,
+                "Informe quando o pagamento foi contestado.",
+            ),
         }
 
         requirement = timestamp_requirements.get(self.status)
@@ -534,6 +608,7 @@ class Payment(models.Model):
             PaymentStatus.REJECTED,
             PaymentStatus.CANCELED,
             PaymentStatus.REFUNDED,
+            PaymentStatus.CHARGED_BACK,
             PaymentStatus.EXPIRED,
             PaymentStatus.ERROR,
         }
@@ -545,6 +620,13 @@ class Payment(models.Model):
             and self.expires_at <= timezone.now()
             and self.status in OPEN_PAYMENT_STATUSES
         )
+
+    @property
+    def masked_payer_document(self):
+        if not self.payer_document_last4:
+            return ""
+
+        return f"***.***.***-{self.payer_document_last4[-2:]}"
 
 
 class WebhookProcessingStatus(models.TextChoices):

@@ -11,12 +11,22 @@ from apps.kits.models import (
     RegistrationKitSelection,
     TicketTypeKit,
 )
+from apps.marketplace.models import (
+    OrganizationPaymentAccount,
+    PaymentAccountStatus,
+)
+from apps.marketplace.crypto import (
+    SecretDecryptionError,
+    decrypt_secret,
+    encrypt_secret,
+)
 from apps.orders.models import (
     Order,
     OrderItem,
     OrderStatus,
 )
 from apps.registrations.models import Registration
+from apps.registrations.validators import validate_cpf
 
 from .gateways.base import (
     PaymentGatewayConfigurationError,
@@ -25,7 +35,10 @@ from .gateways.base import (
     PaymentGatewayTemporaryError,
     PixChargeRequest,
 )
-from .gateways.registry import get_payment_gateway
+from .gateways.registry import (
+    get_payment_gateway,
+    get_payment_gateway_for_organization,
+)
 from .models import (
     OPEN_PAYMENT_STATUSES,
     Payment,
@@ -54,6 +67,15 @@ class _PreparedPayment:
     requires_gateway: bool
 
 
+@dataclass(frozen=True, slots=True)
+class PayerDetails:
+    email: str
+    first_name: str
+    last_name: str
+    document_type: str
+    document_number: str
+
+
 def _validation_error(message):
     return ValidationError(
         {
@@ -72,6 +94,67 @@ def _validate_buyer(buyer):
             "É necessário entrar em uma conta ativa "
             "para realizar o pagamento."
         )
+
+
+def _normalize_payer_details(*, buyer, payer_data):
+    if payer_data is None:
+        return None
+
+    first_name = " ".join(
+        str(payer_data.get("first_name") or "").split()
+    )
+    last_name = " ".join(
+        str(payer_data.get("last_name") or "").split()
+    )
+    document_type = str(
+        payer_data.get("document_type") or ""
+    ).strip().upper()
+
+    if not first_name or not last_name:
+        raise _validation_error(
+            "Informe o nome completo do pagador."
+        )
+
+    if document_type != "CPF":
+        raise _validation_error(
+            "O pagamento PIX exige um CPF válido do pagador."
+        )
+
+    try:
+        document_number = validate_cpf(
+            payer_data.get("document_number")
+        )
+    except ValidationError as error:
+        raise _validation_error(
+            "Informe um CPF válido do pagador."
+        ) from error
+
+    return PayerDetails(
+        email=str(buyer.email).strip().lower(),
+        first_name=first_name,
+        last_name=last_name,
+        document_type=document_type,
+        document_number=document_number,
+    )
+
+
+def _payment_has_same_payer(*, payment, payer):
+    try:
+        persisted_document = decrypt_secret(
+            payment.payer_document_ciphertext
+        )
+    except SecretDecryptionError as error:
+        raise _validation_error(
+            "Não foi possível recuperar os dados protegidos do pagador."
+        ) from error
+
+    return (
+        payment.payer_email == payer.email
+        and payment.payer_first_name == payer.first_name
+        and payment.payer_last_name == payer.last_name
+        and payment.payer_document_type == payer.document_type
+        and persisted_document == payer.document_number
+    )
 
 
 def _validate_checkout_completeness(order):
@@ -201,6 +284,7 @@ def _prepare_payment(
     *,
     order_id,
     buyer,
+    payer_data,
     at,
 ):
     _validate_buyer(buyer)
@@ -221,6 +305,11 @@ def _prepare_payment(
         raise _validation_error(
             "Pedido indisponível para esta operação."
         )
+
+    payer = _normalize_payer_details(
+        buyer=buyer,
+        payer_data=payer_data,
+    )
 
     payments = list(
         Payment.objects
@@ -317,6 +406,11 @@ def _prepare_payment(
             requires_gateway=False,
         )
 
+    if settings.MARKETPLACE_PAYMENTS_ENABLED and payer is None:
+        raise _validation_error(
+            "Informe os dados do pagador antes de gerar o PIX."
+        )
+
     requested_pix_expiration = (
         at
         + timedelta(
@@ -330,6 +424,36 @@ def _prepare_payment(
 
     if open_payment is None:
         pix_expiration = requested_pix_expiration
+        provider_account_reference = ""
+
+        if settings.MARKETPLACE_PAYMENTS_ENABLED:
+            if (
+                order.subtotal > MONEY_ZERO
+                and order.fee_policy_reference is None
+            ):
+                raise _validation_error(
+                    "Este pedido foi criado antes da configuração financeira. "
+                    "Inicie uma nova inscrição."
+                )
+
+            payment_account = (
+                OrganizationPaymentAccount.objects
+                .select_for_update()
+                .filter(
+                    organization=order.organization,
+                    status=PaymentAccountStatus.ACTIVE,
+                )
+                .first()
+            )
+
+            if payment_account is None or not payment_account.is_usable:
+                raise _validation_error(
+                    "O organizador ainda não habilitou o recebimento deste evento."
+                )
+
+            provider_account_reference = (
+                payment_account.provider_user_id
+            )
 
         payment = Payment(
             order=order,
@@ -340,7 +464,24 @@ def _prepare_payment(
             method=PaymentMethod.PIX,
             status=PaymentStatus.CREATED,
             amount=order.total,
-            platform_fee=MONEY_ZERO,
+            platform_fee=order.platform_fee,
+            payer_email=(payer.email if payer else buyer.email),
+            payer_first_name=(payer.first_name if payer else ""),
+            payer_last_name=(payer.last_name if payer else ""),
+            payer_document_type=(
+                payer.document_type if payer else ""
+            ),
+            payer_document_ciphertext=(
+                encrypt_secret(payer.document_number)
+                if payer
+                else ""
+            ),
+            payer_document_last4=(
+                payer.document_number[-4:] if payer else ""
+            ),
+            provider_account_reference=(
+                provider_account_reference
+            ),
             expires_at=pix_expiration,
         )
 
@@ -349,6 +490,27 @@ def _prepare_payment(
         payment_created = True
     else:
         payment = open_payment
+
+        if (
+            settings.MARKETPLACE_PAYMENTS_ENABLED
+            and not payment.payer_document_ciphertext
+        ):
+            raise _validation_error(
+                "Esta tentativa não possui os dados protegidos do pagador. "
+                "Inicie uma nova inscrição."
+            )
+
+        if (
+            payer is not None
+            and not _payment_has_same_payer(
+                payment=payment,
+                payer=payer,
+            )
+        ):
+            raise _validation_error(
+                "Os dados do pagador não podem ser alterados depois que "
+                "a tentativa de pagamento foi criada."
+            )
 
         if (
             payment.provider
@@ -385,7 +547,7 @@ def _prepare_payment(
         and bool(payment.provider_order_id)
         and bool(payment.provider_payment_id)
         and bool(payment.pix_copy_paste)
-        and bool(payment.pix_qr_code_base64)
+        and bool(payment.checkout_url)
     )
 
     return _PreparedPayment(
@@ -526,6 +688,7 @@ def initiate_order_payment(
     *,
     order_id,
     buyer,
+    payer_data=None,
     gateway=None,
     at=None,
 ):
@@ -541,6 +704,7 @@ def initiate_order_payment(
     prepared = _prepare_payment(
         order_id=order_id,
         buyer=buyer,
+        payer_data=payer_data,
         at=reference_time,
     )
 
@@ -555,7 +719,29 @@ def initiate_order_payment(
             ),
         )
 
-    selected_gateway = gateway or get_payment_gateway()
+    selected_gateway = gateway
+
+    if selected_gateway is None:
+        if settings.MARKETPLACE_PAYMENTS_ENABLED:
+            selected_gateway = (
+                get_payment_gateway_for_organization(
+                    prepared.order.organization
+                )
+            )
+        else:
+            selected_gateway = get_payment_gateway()
+
+    payer_document_number = ""
+
+    if prepared.payment.payer_document_ciphertext:
+        try:
+            payer_document_number = decrypt_secret(
+                prepared.payment.payer_document_ciphertext
+            )
+        except SecretDecryptionError as error:
+            raise _validation_error(
+                "Não foi possível recuperar os dados protegidos do pagador."
+            ) from error
 
     pix_request = PixChargeRequest(
         payment_id=prepared.payment.id,
@@ -571,7 +757,10 @@ def initiate_order_payment(
         )[:255],
         amount=prepared.payment.amount,
         platform_fee=prepared.payment.platform_fee,
-        payer_email=prepared.order.buyer.email,
+        payer_email=(
+            prepared.payment.payer_email
+            or prepared.order.buyer.email
+        ),
         expires_at=prepared.payment.expires_at,
         expiration_seconds=(
             settings.PAYMENT_PIX_EXPIRATION_MINUTES
@@ -581,6 +770,12 @@ def initiate_order_payment(
             prepared.payment
             .provider_account_reference
         ),
+        payer_first_name=prepared.payment.payer_first_name,
+        payer_last_name=prepared.payment.payer_last_name,
+        payer_document_type=(
+            prepared.payment.payer_document_type
+        ),
+        payer_document_number=payer_document_number,
     )
 
     try:

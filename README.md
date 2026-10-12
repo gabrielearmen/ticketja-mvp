@@ -1,5 +1,8 @@
 # TicketJá
 
+A ativação do recebimento por organização e da comissão da plataforma está
+documentada em [docs/PAYMENTS_MARKETPLACE.md](docs/PAYMENTS_MARKETPLACE.md).
+
 Plataforma web para organização, divulgação e inscrição em eventos esportivos.
 
 O TicketJá está sendo desenvolvido com Django e PostgreSQL, priorizando segurança, isolamento de dados entre organizações, acessibilidade, desempenho e uma experiência simples para participantes e organizadores.

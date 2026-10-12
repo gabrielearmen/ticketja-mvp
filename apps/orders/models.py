@@ -41,6 +41,7 @@ class OrderStatus(models.TextChoices):
     EXPIRED = "expirado", "Expirado"
     CANCELED = "cancelado", "Cancelado"
     REFUNDED = "reembolsado", "Reembolsado"
+    CHARGED_BACK = "chargeback", "Pagamento contestado"
 
 
 class OrderQuerySet(models.QuerySet):
@@ -169,6 +170,31 @@ class Order(models.Model):
         ],
     )
 
+    platform_fee = models.DecimalField(
+        verbose_name="comissão da plataforma",
+        max_digits=14,
+        decimal_places=2,
+        default=MONEY_ZERO,
+        validators=[MinValueValidator(MONEY_ZERO)],
+    )
+
+    fee_bearer = models.CharField(
+        verbose_name="responsável pela comissão",
+        max_length=20,
+        blank=True,
+        choices=(
+            ("buyer", "Comprador"),
+            ("organizer", "Organizador"),
+        ),
+    )
+
+    fee_policy_reference = models.UUIDField(
+        verbose_name="política de comissão aplicada",
+        null=True,
+        blank=True,
+        editable=False,
+    )
+
     total = models.DecimalField(
         verbose_name="total",
         max_digits=14,
@@ -210,6 +236,21 @@ class Order(models.Model):
             models.CheckConstraint(
                 condition=models.Q(service_fee__gte=0),
                 name="ord_fee_gte_zero",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(platform_fee__gte=0),
+                name="ord_platform_fee_gte_zero",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(platform_fee__lte=models.F("total")),
+                name="ord_platform_fee_lte_total",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(fee_bearer="")
+                    | models.Q(fee_bearer__in=("buyer", "organizer"))
+                ),
+                name="ord_fee_bearer_valid",
             ),
             models.CheckConstraint(
                 condition=models.Q(total__gte=0),

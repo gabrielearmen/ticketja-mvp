@@ -43,6 +43,8 @@ class PixChargeRequest:
     expires_at: datetime
     expiration_seconds: int = 1800
     provider_account_reference: str = ""
+    payer_first_name: str = ""
+    payer_last_name: str = ""
     payer_document_type: str = ""
     payer_document_number: str = ""
 
@@ -69,7 +71,7 @@ class PaymentSnapshot:
     approved_at: datetime | None = None
     provider_fee: Decimal | None = None
     net_amount: Decimal | None = None
-
+    external_reference: str = ""
 
 class PaymentGateway(ABC):
     """

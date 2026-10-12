@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Recebimentos — TicketJá{% endblock %}
+
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/pages/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/pages/marketplace.css' %}">
+{% endblock %}
+
+{% block content %}
+    <section class="dashboard-page" aria-labelledby="payment-account-title">
+        <div class="container marketplace-container">
+            <header class="dashboard-header">
+                <div>
+                    <p class="dashboard-header__eyebrow">Financeiro</p>
+                    <h1 id="payment-account-title">Recebimentos</h1>
+                    <p class="dashboard-header__description">
+                        {{ organization.name }}
+                    </p>
+                </div>
+
+                <a class="button button--header-secondary" href="{% url 'organizations:dashboard' %}">
+                    Voltar ao painel
+                </a>
+            </header>
+
+            <article class="marketplace-card">
+                <div class="marketplace-card__heading">
+                    <div>
+                        <span class="marketplace-provider">Mercado Pago</span>
+                        <h2>Conta que receberá as inscrições</h2>
+                    </div>
+
+                    {% if account and account.is_usable %}
+                        <span class="marketplace-status marketplace-status--active">Conectada</span>
+                    {% else %}
+                        <span class="marketplace-status">Não conectada</span>
+                    {% endif %}
+                </div>
+
+                {% if account and account.is_usable %}
+                    <dl class="marketplace-details">
+                        <div>
+                            <dt>Identificador no provedor</dt>
+                            <dd>{{ account.provider_user_id }}</dd>
+                        </div>
+                        <div>
+                            <dt>Ambiente</dt>
+                            <dd>
+                                {% if account.is_live_mode %}Produção{% elif account.is_live_mode is False %}Teste{% else %}Não informado{% endif %}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Conectada em</dt>
+                            <dd>{{ account.connected_at|date:"d/m/Y H:i" }}</dd>
+                        </div>
+                    </dl>
+
+                    <p class="marketplace-help">
+                        As credenciais estão criptografadas e nunca são exibidas nesta página.
+                    </p>
+                {% else %}
+                    <p class="marketplace-description">
+                        Conecte a conta Mercado Pago do organizador para que os pagamentos sejam
+                        recebidos diretamente por ela e a comissão do TicketJá seja separada na cobrança.
+                    </p>
+
+                    <ul class="marketplace-requirements">
+                        <li>A conta deve pertencer ao responsável financeiro da organização.</li>
+                        <li>A identificação da conta deve estar concluída no Mercado Pago.</li>
+                        <li>Nunca informe senha ou Access Token manualmente ao TicketJá.</li>
+                    </ul>
+
+                    {% if can_manage %}
+                        {% if oauth_enabled %}
+                            <form method="post" action="{% url 'marketplace:mercado-pago-connect' %}">
+                                {% csrf_token %}
+                                <button class="button button--primary" type="submit">
+                                    Conectar Mercado Pago
+                                </button>
+                            </form>
+                        {% else %}
+                            <div class="dashboard-notice">
+                                A conexão será liberada após a configuração das credenciais da aplicação.
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="dashboard-notice">
+                            Somente o proprietário da organização pode conectar a conta financeira.
+                        </div>
+                    {% endif %}
+                {% endif %}
+            </article>
+        </div>
+    </section>
+{% endblock %}

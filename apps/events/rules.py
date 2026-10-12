@@ -1,5 +1,12 @@
+from django.conf import settings
 from django.db.models import Prefetch
 from django.utils import timezone
+
+from apps.marketplace.fees import effective_fee_policy
+from apps.marketplace.models import (
+    OrganizationPaymentAccount,
+    PaymentAccountStatus,
+)
 
 from .models import TicketLot, TicketType
 
@@ -60,9 +67,14 @@ def commercial_configuration_errors(event):
         )
 
     now = timezone.now()
+    has_paid_lot = False
 
     for ticket_type in active_ticket_types:
         active_lots = ticket_type.active_lots
+        has_paid_lot = has_paid_lot or any(
+            lot.price > 0
+            for lot in active_lots
+        )
 
         if not active_lots:
             errors.append(
@@ -125,5 +137,27 @@ def commercial_configuration_errors(event):
                 )
 
             previous_lot = lot
+
+    if settings.MARKETPLACE_PAYMENTS_ENABLED and has_paid_lot:
+        payment_account_ready = (
+            OrganizationPaymentAccount.objects.filter(
+                organization=event.organization,
+                status=PaymentAccountStatus.ACTIVE,
+                provider_user_id__isnull=False,
+            )
+            .exclude(access_token_ciphertext="")
+            .exclude(refresh_token_ciphertext="")
+            .exists()
+        )
+
+        if not payment_account_ready:
+            errors.append(
+                "Conecte a conta Mercado Pago da organização antes de publicar um evento pago."
+            )
+
+        if effective_fee_policy(at=now) is None:
+            errors.append(
+                "A política de comissão do TicketJá ainda não foi configurada."
+            )
 
     return errors

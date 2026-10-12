@@ -172,6 +172,7 @@ LOCAL_APPS = [
     "apps.kits.apps.KitsConfig",
     "apps.orders.apps.OrdersConfig",
     "apps.registrations.apps.RegistrationsConfig",
+    "apps.marketplace.apps.MarketplaceConfig",
     "apps.payments.apps.PaymentsConfig",
 ]
 
@@ -404,6 +405,13 @@ MERCADO_PAGO_ACCESS_TOKEN = os.environ.get(
     "",
 ).strip()
 
+# Ativa os comportamentos oficiais de simulação do Mercado Pago.
+# Nunca deve permanecer True quando forem utilizadas credenciais reais.
+MERCADO_PAGO_TEST_MODE = environment_boolean(
+    "MERCADO_PAGO_TEST_MODE",
+    default=False,
+)
+
 
 # O Mercado Pago utiliza o mesmo endereço de API para testes e
 # produção. O ambiente é determinado pela credencial utilizada.
@@ -422,11 +430,107 @@ MERCADO_PAGO_TIMEOUT_SECONDS = environment_integer(
 )
 
 
-# A Orders API do Mercado Pago exige pelo menos 30 minutos
+# A Payments API do Mercado Pago exige pelo menos 30 minutos
 # para o vencimento de pagamentos PIX.
 PAYMENT_PIX_EXPIRATION_MINUTES = environment_integer(
     "PAYMENT_PIX_EXPIRATION_MINUTES",
     default=30,
     minimum=30,
     maximum=1440,
+)
+
+PAYMENT_RECONCILIATION_MIN_INTERVAL_MINUTES = environment_integer(
+    "PAYMENT_RECONCILIATION_MIN_INTERVAL_MINUTES",
+    default=5,
+    minimum=1,
+    maximum=60,
+)
+
+PAYMENT_SETTLED_RECONCILIATION_INTERVAL_HOURS = environment_integer(
+    "PAYMENT_SETTLED_RECONCILIATION_INTERVAL_HOURS",
+    default=24,
+    minimum=1,
+    maximum=168,
+)
+
+PAYMENT_RECONCILIATION_LOOKBACK_DAYS = environment_integer(
+    "PAYMENT_RECONCILIATION_LOOKBACK_DAYS",
+    default=180,
+    minimum=1,
+    maximum=365,
+)
+
+# Chave utilizada exclusivamente para autenticar os Webhooks
+# enviados pelo Mercado Pago.
+#
+# Não é o Access Token e nunca deve ser exposta em templates,
+# JavaScript, GitHub ou mensagens de erro.
+MERCADO_PAGO_WEBHOOK_SECRET = os.environ.get(
+    "MERCADO_PAGO_WEBHOOK_SECRET",
+    "",
+).strip()
+
+
+# Proteção contra corpos excessivamente grandes enviados ao endpoint.
+PAYMENT_WEBHOOK_MAX_BODY_BYTES = environment_integer(
+    "PAYMENT_WEBHOOK_MAX_BODY_BYTES",
+    default=65536,
+    minimum=1024,
+    maximum=1048576,
+)
+
+
+# Marketplace Mercado Pago.
+#
+# O modo marketplace permanece desligado até OAuth, webhooks e
+# homologação produtiva estarem concluídos. Isso impede que uma
+# configuração parcial direcione dinheiro para a conta errada.
+MARKETPLACE_PAYMENTS_ENABLED = environment_boolean(
+    "MARKETPLACE_PAYMENTS_ENABLED",
+    default=False,
+)
+
+MARKETPLACE_OAUTH_ENABLED = environment_boolean(
+    "MARKETPLACE_OAUTH_ENABLED",
+    default=False,
+)
+
+# Chaves Fernet separadas por vírgula. A primeira cifra valores novos;
+# as demais permitem descriptografar valores durante rotação de chave.
+# Nunca reutilize DJANGO_SECRET_KEY para esta finalidade.
+MARKETPLACE_TOKEN_ENCRYPTION_KEYS = os.environ.get(
+    "MARKETPLACE_TOKEN_ENCRYPTION_KEYS",
+    "",
+).strip()
+
+MERCADO_PAGO_CLIENT_ID = os.environ.get(
+    "MERCADO_PAGO_CLIENT_ID",
+    "",
+).strip()
+
+MERCADO_PAGO_CLIENT_SECRET = os.environ.get(
+    "MERCADO_PAGO_CLIENT_SECRET",
+    "",
+).strip()
+
+MERCADO_PAGO_OAUTH_REDIRECT_URI = os.environ.get(
+    "MERCADO_PAGO_OAUTH_REDIRECT_URI",
+    "",
+).strip()
+
+MERCADO_PAGO_OAUTH_AUTHORIZE_URL = os.environ.get(
+    "MERCADO_PAGO_OAUTH_AUTHORIZE_URL",
+    "https://auth.mercadopago.com.br/authorization",
+).strip()
+
+MERCADO_PAGO_OAUTH_TOKEN_URL = os.environ.get(
+    "MERCADO_PAGO_OAUTH_TOKEN_URL",
+    "https://api.mercadopago.com/oauth/token",
+).strip()
+
+MARKETPLACE_OAUTH_STATE_TTL_MINUTES = environment_integer(
+    "MARKETPLACE_OAUTH_STATE_TTL_MINUTES",
+    default=10,
+    minimum=5,
+    maximum=30,
 )
