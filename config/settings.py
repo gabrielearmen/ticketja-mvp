@@ -430,11 +430,12 @@ MERCADO_PAGO_TIMEOUT_SECONDS = environment_integer(
 )
 
 
-# A Payments API do Mercado Pago exige pelo menos 30 minutos
-# para o vencimento de pagamentos PIX.
+# A Payments API do Mercado Pago exige pelo menos 30 minutos.
+# O padrão inclui uma margem operacional para que o prazo não fique
+# abaixo do mínimo durante a preparação e o envio da requisição.
 PAYMENT_PIX_EXPIRATION_MINUTES = environment_integer(
     "PAYMENT_PIX_EXPIRATION_MINUTES",
-    default=30,
+    default=35,
     minimum=30,
     maximum=1440,
 )

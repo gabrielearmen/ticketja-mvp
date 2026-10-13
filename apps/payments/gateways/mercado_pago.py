@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -48,6 +48,29 @@ def _parse_datetime(value):
         parsed = timezone.make_aware(parsed)
 
     return parsed
+
+
+def _format_mercado_pago_datetime(value):
+    """
+    Formata datas para o padrão ISO 8601 aceito pela Payments API.
+
+    O Mercado Pago exige timezone explícito e precisão máxima
+    de milissegundos no campo date_of_expiration.
+    """
+    if not isinstance(value, datetime):
+        raise PaymentGatewayRejectedError(
+            "A data de vencimento do PIX é inválida."
+        )
+
+    if timezone.is_naive(value):
+        value = timezone.make_aware(
+            value,
+            datetime_timezone.utc,
+        )
+
+    return value.astimezone(datetime_timezone.utc).isoformat(
+        timespec="milliseconds"
+    )
 
 
 def _first_transaction_payment(order_data):
@@ -301,7 +324,9 @@ class MercadoPagoGateway(PaymentGateway):
             "description": request.description,
             "payment_method_id": "pix",
             "external_reference": request.external_reference,
-            "date_of_expiration": request.expires_at.isoformat(),
+            "date_of_expiration": _format_mercado_pago_datetime(
+                request.expires_at
+            ),
             "payer": payer,
         }
 

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, timezone as datetime_timezone
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -189,6 +189,12 @@ class MercadoPagoGatewayTests(SimpleTestCase):
         self.assertEqual(
             request_kwargs["payload"]["payer"]["identification"],
             {"type": "CPF", "number": "52998224725"},
+        )
+        self.assertEqual(
+            request_kwargs["payload"]["date_of_expiration"],
+            request_data.expires_at.astimezone(
+                datetime_timezone.utc
+            ).isoformat(timespec="milliseconds"),
         )
         self.assertEqual(
             result.provider_order_id,
