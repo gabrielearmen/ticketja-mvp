@@ -108,6 +108,38 @@ def _sanitized_provider_message(payload, status_code):
                 f"({status_code}): {str(message)[:300]}"
             )
 
+        provider_errors = payload.get("errors")
+
+        if isinstance(provider_errors, list):
+            safe_errors = []
+
+            for item in provider_errors[:3]:
+                if not isinstance(item, dict):
+                    continue
+
+                code = str(item.get("code") or "").strip()
+                detail = str(
+                    item.get("message")
+                    or item.get("detail")
+                    or ""
+                ).strip()
+                safe_text = " — ".join(
+                    value
+                    for value in (code, detail)
+                    if value
+                )
+
+                if safe_text:
+                    safe_errors.append(
+                        " ".join(safe_text.split())[:300]
+                    )
+
+            if safe_errors:
+                return (
+                    f"Mercado Pago recusou a operação ({status_code}): "
+                    + "; ".join(safe_errors)
+                )
+
     return (
         f"Mercado Pago recusou a operação "
         f"com código HTTP {status_code}."
@@ -313,6 +345,9 @@ class MercadoPagoGateway(PaymentGateway):
                 "O vencimento do PIX não pode superar 30 dias."
             )
 
+        if expiration_seconds % 60 == 0:
+            return f"PT{expiration_seconds // 60}M"
+
         return f"PT{expiration_seconds}S"
 
     def create_pix_charge(
@@ -470,8 +505,6 @@ class MercadoPagoGateway(PaymentGateway):
                     "title": item.title[:255],
                     "quantity": item.quantity,
                     "unit_price": _money_string(unit_price),
-                    "unit_measure": "unit",
-                    "total_amount": _money_string(item_total),
                 }
             )
 

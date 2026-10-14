@@ -48,7 +48,10 @@ from .gateways.base import (
     PixChargeRequest,
     PixChargeResult,
 )
-from .gateways.mercado_pago import MercadoPagoGateway
+from .gateways.mercado_pago import (
+    MercadoPagoGateway,
+    _sanitized_provider_message,
+)
 from .models import (
     Payment,
     PaymentMethod,
@@ -187,6 +190,7 @@ class MercadoPagoGatewayTests(SimpleTestCase):
         self.assertEqual(request_kwargs["path"], "/v1/orders")
         self.assertEqual(payload["total_amount"], "108.00")
         self.assertEqual(payload["marketplace_fee"], "8.00")
+        self.assertEqual(payload["expiration_time"], "PT35M")
         self.assertEqual(payload["processing_mode"], "manual")
         self.assertEqual(payload["capture_mode"], "automatic_async")
         self.assertEqual(
@@ -194,6 +198,24 @@ class MercadoPagoGatewayTests(SimpleTestCase):
             "all",
         )
         self.assertEqual(result.provider_order_id, "ORD-123")
+        self.assertNotIn("unit_measure", payload["items"][0])
+        self.assertNotIn("total_amount", payload["items"][0])
+
+    def test_sanitizes_orders_api_error_list(self):
+        message = _sanitized_provider_message(
+            {
+                "errors": [
+                    {
+                        "code": "unsupported_properties",
+                        "message": "Property unit_measure is not supported",
+                    }
+                ]
+            },
+            400,
+        )
+
+        self.assertIn("unsupported_properties", message)
+        self.assertIn("unit_measure", message)
 
     @override_settings(MERCADO_PAGO_TEST_MODE=True)
     def test_creates_pix_with_idempotency_and_qr_code(self):
