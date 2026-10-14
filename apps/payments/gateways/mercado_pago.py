@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -10,6 +10,8 @@ from django.conf import settings
 from django.utils import timezone
 
 from .base import (
+    HostedCheckoutRequest,
+    HostedCheckoutResult,
     PaymentGateway,
     PaymentGatewayConfigurationError,
     PaymentGatewayRejectedError,
@@ -21,6 +23,10 @@ from .base import (
 
 MINIMUM_PIX_EXPIRATION_SECONDS = 30 * 60
 MAXIMUM_PIX_EXPIRATION_SECONDS = 30 * 24 * 60 * 60
+MERCADO_PAGO_CHECKOUT_HOSTS = (
+    "mercadopago.com",
+    "mercadopago.com.br",
+)
 
 
 def _decimal_value(value, *, default="0.00"):
@@ -108,12 +114,33 @@ def _sanitized_provider_message(payload, status_code):
     )
 
 
+def _money_string(value):
+    return format(
+        Decimal(value).quantize(Decimal("0.01")),
+        ".2f",
+    )
+
+
+def _is_mercado_pago_checkout_url(value):
+    parsed = urlparse(str(value or "").strip())
+    hostname = (parsed.hostname or "").lower()
+
+    return (
+        parsed.scheme == "https"
+        and any(
+            hostname == allowed
+            or hostname.endswith(f".{allowed}")
+            for allowed in MERCADO_PAGO_CHECKOUT_HOSTS
+        )
+    )
+
+
 class MercadoPagoGateway(PaymentGateway):
     """
-    Integração REST com a Payments API do Mercado Pago.
+    Integração REST com as APIs de Payments e Orders.
 
-    O Split 1:1 utiliza o Access Token OAuth do vendedor e envia
-    a comissão do TicketJá no campo application_fee.
+    No Checkout Pro com Split 1:1, o Access Token OAuth pertence
+    ao organizador e a comissão do TicketJá usa marketplace_fee.
     """
 
     def __init__(
@@ -401,6 +428,123 @@ class MercadoPagoGateway(PaymentGateway):
             ),
             pix_copy_paste=pix_copy_paste,
             pix_qr_code_base64=pix_qr_code_base64,
+            checkout_url=checkout_url,
+            expires_at=request.expires_at,
+        )
+
+    def create_hosted_checkout(
+        self,
+        request: HostedCheckoutRequest,
+    ) -> HostedCheckoutResult:
+        expiration_time = self._expiration_duration(
+            request.expiration_seconds
+        )
+
+        if not request.items:
+            raise PaymentGatewayRejectedError(
+                "O checkout precisa possuir ao menos um item."
+            )
+
+        items = []
+        calculated_total = Decimal("0.00")
+
+        for item in request.items:
+            if item.quantity < 1:
+                raise PaymentGatewayRejectedError(
+                    "A quantidade de um item do checkout é inválida."
+                )
+
+            unit_price = item.unit_price.quantize(
+                Decimal("0.01")
+            )
+
+            if unit_price < Decimal("0.00"):
+                raise PaymentGatewayRejectedError(
+                    "O valor de um item do checkout é inválido."
+                )
+
+            item_total = unit_price * item.quantity
+            calculated_total += item_total
+            items.append(
+                {
+                    "title": item.title[:255],
+                    "quantity": item.quantity,
+                    "unit_price": _money_string(unit_price),
+                    "unit_measure": "unit",
+                    "total_amount": _money_string(item_total),
+                }
+            )
+
+        amount = request.amount.quantize(Decimal("0.01"))
+
+        if calculated_total.quantize(Decimal("0.01")) != amount:
+            raise PaymentGatewayRejectedError(
+                "A soma dos itens diverge do total do checkout."
+            )
+
+        payload = {
+            "type": "online",
+            "processing_mode": "manual",
+            "capture_mode": "automatic_async",
+            "total_amount": _money_string(amount),
+            "external_reference": request.external_reference,
+            "description": request.description[:255],
+            "expiration_time": expiration_time,
+            "payer": {
+                "email": request.payer_email,
+            },
+            "items": items,
+            "config": {
+                "online": {
+                    "success_url": request.success_url,
+                    "pending_url": request.pending_url,
+                    "failure_url": request.failure_url,
+                    "auto_return": "all",
+                }
+            },
+        }
+
+        platform_fee = request.platform_fee.quantize(
+            Decimal("0.01")
+        )
+
+        if platform_fee > Decimal("0.00"):
+            payload["marketplace_fee"] = _money_string(
+                platform_fee
+            )
+
+        order_data = self._request_json(
+            method="POST",
+            path="/v1/orders",
+            payload=payload,
+            idempotency_key=request.idempotency_key,
+        )
+
+        provider_order_id = str(
+            order_data.get("id") or ""
+        ).strip()
+        checkout_url = str(
+            order_data.get("checkout_url") or ""
+        ).strip()
+
+        if not provider_order_id:
+            raise PaymentGatewayTemporaryError(
+                "O Mercado Pago não retornou o identificador da ordem."
+            )
+
+        if not _is_mercado_pago_checkout_url(checkout_url):
+            raise PaymentGatewayTemporaryError(
+                "O Mercado Pago não retornou um endereço de checkout válido."
+            )
+
+        return HostedCheckoutResult(
+            provider_order_id=provider_order_id,
+            provider_status=str(
+                order_data.get("status") or ""
+            ),
+            provider_status_detail=str(
+                order_data.get("status_detail") or ""
+            ),
             checkout_url=checkout_url,
             expires_at=request.expires_at,
         )

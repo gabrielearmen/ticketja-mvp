@@ -80,7 +80,17 @@ def _validate_snapshot(*, payment, snapshot):
             "à cobrança registrada."
         )
 
-    if not snapshot.provider_payment_id:
+    provider_status = _normalize_provider_value(
+        snapshot.provider_status
+    )
+    provider_payment_is_required = (
+        provider_status not in PROVIDER_PENDING_STATUSES
+    )
+
+    if (
+        provider_payment_is_required
+        and not snapshot.provider_payment_id
+    ):
         raise PaymentConfirmationError(
             "O provedor não retornou o identificador "
             "do pagamento."
@@ -404,9 +414,10 @@ def reconcile_payment_snapshot(
         snapshot.provider_status_detail
     )
 
-    payment.provider_payment_id = (
-        snapshot.provider_payment_id
-    )
+    if snapshot.provider_payment_id:
+        payment.provider_payment_id = (
+            snapshot.provider_payment_id
+        )
     payment.provider_status = provider_status
     payment.provider_status_detail = provider_detail
     payment.provider_fee = snapshot.provider_fee

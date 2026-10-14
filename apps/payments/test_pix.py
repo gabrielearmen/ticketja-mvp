@@ -24,6 +24,11 @@ from apps.orders.models import (
     OrderItem,
     OrderStatus,
 )
+from apps.marketplace.crypto import encrypt_secret
+from apps.marketplace.models import (
+    OrganizationPaymentAccount,
+    PaymentAccountStatus,
+)
 from apps.organizations.models import (
     Organization,
     OrganizationStatus,
@@ -34,6 +39,9 @@ from apps.registrations.models import (
 )
 
 from .gateways.base import (
+    HostedCheckoutItem,
+    HostedCheckoutRequest,
+    HostedCheckoutResult,
     PaymentGateway,
     PaymentGatewayTemporaryError,
     PaymentSnapshot,
@@ -46,7 +54,10 @@ from .models import (
     PaymentMethod,
     PaymentStatus,
 )
-from .services import initiate_order_payment
+from .services import (
+    CheckoutReturnUrls,
+    initiate_order_payment,
+)
 
 
 PAYER_TEST_KEY = Fernet.generate_key().decode("ascii")
@@ -99,7 +110,91 @@ class FakePixGateway(PaymentGateway):
         )
 
 
+class FakeHostedCheckoutGateway(FakePixGateway):
+    def __init__(self):
+        super().__init__()
+        self.checkout_calls = []
+
+    def create_hosted_checkout(self, request):
+        self.checkout_calls.append(request)
+
+        return HostedCheckoutResult(
+            provider_order_id="ORD-CHECKOUT-001",
+            provider_status="created",
+            provider_status_detail="created",
+            checkout_url=(
+                "https://www.mercadopago.com.br/"
+                "checkout/v1/redirect?order_id=ORD-CHECKOUT-001"
+            ),
+            expires_at=request.expires_at,
+        )
+
+
 class MercadoPagoGatewayTests(SimpleTestCase):
+    def test_creates_checkout_pro_order_with_marketplace_fee(self):
+        gateway = MercadoPagoGateway(
+            access_token="APP_USR-SELLER-TOKEN",
+            api_base_url="https://api.mercadopago.com",
+            timeout_seconds=15,
+            use_orders_api=True,
+        )
+        provider_response = {
+            "id": "ORD-123",
+            "status": "created",
+            "status_detail": "created",
+            "checkout_url": (
+                "https://www.mercadopago.com.br/"
+                "checkout/v1/redirect?order_id=ORD-123"
+            ),
+        }
+        request_data = HostedCheckoutRequest(
+            payment_id=__import__("uuid").uuid4(),
+            idempotency_key=__import__("uuid").uuid4(),
+            external_reference="TJP-CHECKOUT123",
+            description="Pedido de teste",
+            amount=Decimal("108.00"),
+            platform_fee=Decimal("8.00"),
+            payer_email="comprador@example.com",
+            expires_at=timezone.now() + timedelta(minutes=35),
+            expiration_seconds=35 * 60,
+            success_url="https://ticketja.example/sucesso/",
+            pending_url="https://ticketja.example/pendente/",
+            failure_url="https://ticketja.example/falha/",
+            items=(
+                HostedCheckoutItem(
+                    title="Ingresso Geral",
+                    quantity=1,
+                    unit_price=Decimal("100.00"),
+                ),
+                HostedCheckoutItem(
+                    title="Taxa de serviço TicketJá",
+                    quantity=1,
+                    unit_price=Decimal("8.00"),
+                ),
+            ),
+        )
+
+        with patch.object(
+            gateway,
+            "_request_json",
+            return_value=provider_response,
+        ) as request_mock:
+            result = gateway.create_hosted_checkout(request_data)
+
+        request_kwargs = request_mock.call_args.kwargs
+        payload = request_kwargs["payload"]
+
+        self.assertEqual(request_kwargs["path"], "/v1/orders")
+        self.assertEqual(payload["total_amount"], "108.00")
+        self.assertEqual(payload["marketplace_fee"], "8.00")
+        self.assertEqual(payload["processing_mode"], "manual")
+        self.assertEqual(payload["capture_mode"], "automatic_async")
+        self.assertEqual(
+            payload["config"]["online"]["auto_return"],
+            "all",
+        )
+        self.assertEqual(result.provider_order_id, "ORD-123")
+
     @override_settings(MERCADO_PAGO_TEST_MODE=True)
     def test_creates_pix_with_idempotency_and_qr_code(self):
         gateway = MercadoPagoGateway(
@@ -376,6 +471,72 @@ class PixPaymentServiceTests(TestCase):
         )
 
     @override_settings(
+        MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_CHECKOUT_MODE="checkout_pro",
+        MARKETPLACE_TOKEN_ENCRYPTION_KEYS=PAYER_TEST_KEY,
+    )
+    def test_marketplace_creates_hosted_checkout_without_card_data(self):
+        order = self.create_ready_order()
+        order.platform_fee = Decimal("8.00")
+        order.fee_policy_reference = __import__("uuid").uuid4()
+        order.save(
+            update_fields=(
+                "platform_fee",
+                "fee_policy_reference",
+                "updated_at",
+            )
+        )
+        OrganizationPaymentAccount.objects.create(
+            organization=self.organization,
+            status=PaymentAccountStatus.ACTIVE,
+            provider_user_id="seller-checkout-001",
+            access_token_ciphertext=encrypt_secret(
+                "seller-oauth-token"
+            ),
+            connected_at=timezone.now(),
+        )
+        gateway = FakeHostedCheckoutGateway()
+        return_urls = CheckoutReturnUrls(
+            success="https://ticketja.example/sucesso/",
+            pending="https://ticketja.example/pendente/",
+            failure="https://ticketja.example/falha/",
+        )
+
+        result = initiate_order_payment(
+            order_id=order.id,
+            buyer=self.buyer,
+            return_urls=return_urls,
+            gateway=gateway,
+        )
+
+        result.payment.refresh_from_db()
+        self.assertEqual(
+            result.payment.method,
+            PaymentMethod.CHECKOUT_PRO,
+        )
+        self.assertEqual(
+            result.payment.provider_order_id,
+            "ORD-CHECKOUT-001",
+        )
+        self.assertEqual(
+            result.payment.payer_document_ciphertext,
+            "",
+        )
+        self.assertEqual(len(gateway.checkout_calls), 1)
+        checkout_request = gateway.checkout_calls[0]
+        self.assertEqual(
+            checkout_request.platform_fee,
+            Decimal("8.00"),
+        )
+        self.assertEqual(
+            sum(
+                item.unit_price * item.quantity
+                for item in checkout_request.items
+            ),
+            order.total,
+        )
+
+    @override_settings(
         MARKETPLACE_TOKEN_ENCRYPTION_KEYS=PAYER_TEST_KEY,
     )
     def test_payer_snapshot_is_encrypted_and_sent_to_gateway(self):
@@ -414,6 +575,7 @@ class PixPaymentServiceTests(TestCase):
 
     @override_settings(
         MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_CHECKOUT_MODE="pix",
         MARKETPLACE_TOKEN_ENCRYPTION_KEYS=PAYER_TEST_KEY,
     )
     def test_marketplace_payment_requires_payer_details(self):

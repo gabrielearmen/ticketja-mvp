@@ -1,10 +1,11 @@
 import json
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -23,12 +24,18 @@ from .gateways.base import (
     PaymentGatewayError,
     PaymentGatewayTemporaryError,
 )
-from .forms import PaymentPayerForm
+from .forms import (
+    HostedCheckoutConfirmationForm,
+    PaymentPayerForm,
+)
 from .models import (
     PaymentMethod,
     PaymentStatus,
 )
-from .services import initiate_order_payment
+from .services import (
+    CheckoutReturnUrls,
+    initiate_order_payment,
+)
 from .webhook_services import (
     WebhookPayloadConflict,
     WebhookProcessingError,
@@ -50,6 +57,59 @@ TERMINAL_PAYMENT_STATES = {
     "error",
 }
 
+CHECKOUT_RETURN_OUTCOMES = {
+    "sucesso",
+    "pendente",
+    "falha",
+}
+MERCADO_PAGO_CHECKOUT_HOSTS = {
+    "mercadopago.com",
+    "mercadopago.com.br",
+}
+
+
+def _uses_hosted_checkout():
+    return (
+        settings.MARKETPLACE_PAYMENTS_ENABLED
+        and settings.MARKETPLACE_CHECKOUT_MODE
+        == "checkout_pro"
+    )
+
+
+def _checkout_return_urls(request, public_code):
+    def absolute(outcome):
+        return request.build_absolute_uri(
+            reverse(
+                "payments:return",
+                kwargs={
+                    "public_code": public_code,
+                    "outcome": outcome,
+                },
+            )
+        )
+
+    return CheckoutReturnUrls(
+        success=absolute("sucesso"),
+        pending=absolute("pendente"),
+        failure=absolute("falha"),
+    )
+
+
+def _safe_checkout_url(value):
+    normalized = str(value or "").strip()
+    parsed = urlparse(normalized)
+    hostname = (parsed.hostname or "").lower()
+    is_allowed_host = any(
+        hostname == allowed
+        or hostname.endswith(f".{allowed}")
+        for allowed in MERCADO_PAGO_CHECKOUT_HOSTS
+    )
+
+    if parsed.scheme != "https" or not is_allowed_host:
+        return ""
+
+    return normalized
+
 
 def _service_error_messages(error):
     if hasattr(error, "message_dict"):
@@ -68,7 +128,7 @@ def _service_error_messages(error):
 @login_required
 @require_http_methods(["GET", "POST"])
 def payer_details(request, public_code):
-    """Coleta o CPF do pagador antes de criar a cobrança PIX."""
+    """Confirma os dados necessários antes de iniciar o pagamento."""
 
     order = order_for_buyer_or_404(
         buyer=request.user,
@@ -112,36 +172,66 @@ def payer_details(request, public_code):
 
     open_payment = order.payments.open().first()
 
-    if (
-        open_payment is not None
-        and open_payment.provider_order_id
-        and open_payment.pix_copy_paste
-    ):
-        return redirect(
-            "payments:detail",
-            public_code=order.public_code,
+    if open_payment is not None and open_payment.provider_order_id:
+        safe_checkout_url = _safe_checkout_url(
+            open_payment.checkout_url
         )
 
-    form = PaymentPayerForm(
-        request.POST or None,
-        initial={
-            "full_name": " ".join(
-                part
-                for part in (
-                    request.user.first_name,
-                    request.user.last_name,
-                )
-                if part
+        if (
+            open_payment.method == PaymentMethod.CHECKOUT_PRO
+            and safe_checkout_url
+        ):
+            return redirect(safe_checkout_url)
+
+        if open_payment.pix_copy_paste:
+            return redirect(
+                "payments:detail",
+                public_code=order.public_code,
+            )
+
+    uses_hosted_checkout = _uses_hosted_checkout()
+
+    if uses_hosted_checkout:
+        form = HostedCheckoutConfirmationForm(
+            (
+                request.POST
+                if request.method == "POST"
+                else None
             ),
-        },
-    )
+        )
+    else:
+        form = PaymentPayerForm(
+            request.POST or None,
+            initial={
+                "full_name": " ".join(
+                    part
+                    for part in (
+                        request.user.first_name,
+                        request.user.last_name,
+                    )
+                    if part
+                ),
+            },
+        )
 
     if request.method == "POST" and form.is_valid():
         try:
             result = initiate_order_payment(
                 order_id=order.id,
                 buyer=request.user,
-                payer_data=form.payer_payload(),
+                payer_data=(
+                    None
+                    if uses_hosted_checkout
+                    else form.payer_payload()
+                ),
+                return_urls=(
+                    _checkout_return_urls(
+                        request,
+                        order.public_code,
+                    )
+                    if uses_hosted_checkout
+                    else None
+                ),
             )
         except (ValidationError, PaymentGatewayError) as error:
             for error_message in _service_error_messages(error):
@@ -155,7 +245,23 @@ def payer_details(request, public_code):
             else:
                 messages.success(
                     request,
-                    "Cobrança PIX criada com segurança.",
+                    (
+                        "Checkout seguro criado. Escolha o meio de pagamento."
+                        if uses_hosted_checkout
+                        else "Cobrança PIX criada com segurança."
+                    ),
+                )
+
+            if (
+                uses_hosted_checkout
+                and _safe_checkout_url(
+                    result.payment.checkout_url
+                )
+            ):
+                return redirect(
+                    _safe_checkout_url(
+                        result.payment.checkout_url
+                    )
                 )
 
             return redirect(
@@ -170,7 +276,47 @@ def payer_details(request, public_code):
             "order": order,
             "form": form,
             "buyer_email": request.user.email,
+            "uses_hosted_checkout": uses_hosted_checkout,
         },
+    )
+
+
+@login_required
+@require_GET
+def checkout_return(request, public_code, outcome):
+    """
+    Recebe o navegador de volta sem confiar no status da URL.
+
+    A confirmação financeira continua dependendo do webhook ou
+    da consulta autenticada ao Mercado Pago.
+    """
+    if outcome not in CHECKOUT_RETURN_OUTCOMES:
+        raise Http404
+
+    order = order_for_buyer_or_404(
+        buyer=request.user,
+        public_code=public_code,
+    )
+
+    if outcome == "sucesso":
+        messages.info(
+            request,
+            "Pagamento enviado. Estamos confirmando com o Mercado Pago.",
+        )
+    elif outcome == "pendente":
+        messages.info(
+            request,
+            "O pagamento ainda está pendente de confirmação.",
+        )
+    else:
+        messages.warning(
+            request,
+            "O pagamento não foi concluído. Você pode tentar novamente.",
+        )
+
+    return redirect(
+        "payments:detail",
+        public_code=order.public_code,
     )
 
 
@@ -312,6 +458,15 @@ def payment_detail(request, public_code):
         and bool(payment.pix_qr_code_base64)
     )
 
+    hosted_checkout_url = _safe_checkout_url(
+        payment.checkout_url
+    )
+    show_hosted_checkout = (
+        ui_state == "pending"
+        and payment.method == PaymentMethod.CHECKOUT_PRO
+        and bool(hosted_checkout_url)
+    )
+
     context = {
         "order": order,
         "order_items": (
@@ -330,6 +485,8 @@ def payment_detail(request, public_code):
         "has_payment_error": has_payment_error,
         "is_free": is_free,
         "show_pix": show_pix,
+        "show_hosted_checkout": show_hosted_checkout,
+        "hosted_checkout_url": hosted_checkout_url,
         "qr_code_data_uri": (
             _qr_code_data_uri(
                 payment.pix_qr_code_base64

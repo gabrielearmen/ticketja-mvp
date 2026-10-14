@@ -59,3 +59,12 @@ class PaymentPayerForm(forms.Form):
                 "document_number"
             ],
         }
+
+
+class HostedCheckoutConfirmationForm(forms.Form):
+    """
+    Confirmação protegida por CSRF antes do redirecionamento.
+
+    O Mercado Pago coleta os dados necessários ao meio escolhido;
+    o TicketJá não recebe nem armazena dados de cartão.
+    """

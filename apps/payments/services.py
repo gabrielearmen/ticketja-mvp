@@ -29,6 +29,8 @@ from apps.registrations.models import Registration
 from apps.registrations.validators import validate_cpf
 
 from .gateways.base import (
+    HostedCheckoutItem,
+    HostedCheckoutRequest,
     PaymentGatewayConfigurationError,
     PaymentGatewayError,
     PaymentGatewayRejectedError,
@@ -74,6 +76,21 @@ class PayerDetails:
     last_name: str
     document_type: str
     document_number: str
+
+
+@dataclass(frozen=True, slots=True)
+class CheckoutReturnUrls:
+    success: str
+    pending: str
+    failure: str
+
+
+def _uses_hosted_checkout():
+    return (
+        settings.MARKETPLACE_PAYMENTS_ENABLED
+        and settings.MARKETPLACE_CHECKOUT_MODE
+        == "checkout_pro"
+    )
 
 
 def _validation_error(message):
@@ -406,24 +423,31 @@ def _prepare_payment(
             requires_gateway=False,
         )
 
-    if settings.MARKETPLACE_PAYMENTS_ENABLED and payer is None:
+    if (
+        settings.MARKETPLACE_PAYMENTS_ENABLED
+        and not _uses_hosted_checkout()
+        and payer is None
+    ):
         raise _validation_error(
             "Informe os dados do pagador antes de gerar o PIX."
         )
 
-    requested_pix_expiration = (
+    expiration_minutes = (
+        settings.PAYMENT_CHECKOUT_EXPIRATION_MINUTES
+        if _uses_hosted_checkout()
+        else settings.PAYMENT_PIX_EXPIRATION_MINUTES
+    )
+    requested_expiration = (
         at
         + timedelta(
-            minutes=(
-                settings.PAYMENT_PIX_EXPIRATION_MINUTES
-            )
+            minutes=expiration_minutes
         )
     )
 
     payment_created = False
 
     if open_payment is None:
-        pix_expiration = requested_pix_expiration
+        payment_expiration = requested_expiration
         provider_account_reference = ""
 
         if settings.MARKETPLACE_PAYMENTS_ENABLED:
@@ -461,7 +485,11 @@ def _prepare_payment(
                 payments
             ),
             provider=PaymentProvider.MERCADO_PAGO,
-            method=PaymentMethod.PIX,
+            method=(
+                PaymentMethod.CHECKOUT_PRO
+                if _uses_hosted_checkout()
+                else PaymentMethod.PIX
+            ),
             status=PaymentStatus.CREATED,
             amount=order.total,
             platform_fee=order.platform_fee,
@@ -482,7 +510,7 @@ def _prepare_payment(
             provider_account_reference=(
                 provider_account_reference
             ),
-            expires_at=pix_expiration,
+            expires_at=payment_expiration,
         )
 
         payment.full_clean()
@@ -515,7 +543,11 @@ def _prepare_payment(
         if (
             payment.provider
             != PaymentProvider.MERCADO_PAGO
-            or payment.method != PaymentMethod.PIX
+            or payment.method
+            not in {
+                PaymentMethod.PIX,
+                PaymentMethod.CHECKOUT_PRO,
+            }
         ):
             raise _validation_error(
                 "Já existe uma tentativa de pagamento "
@@ -524,17 +556,17 @@ def _prepare_payment(
 
         if payment.expires_at is None:
             raise _validation_error(
-                "A tentativa PIX existente não possui "
+                "A tentativa de pagamento existente não possui "
                 "um vencimento válido."
             )
 
         # Uma repetição precisa manter o vencimento original.
         # Isso preserva o mesmo conteúdo enviado com a mesma
         # chave de idempotência.
-        pix_expiration = payment.expires_at
+        payment_expiration = payment.expires_at
 
-    if order.reservation_expires_at != pix_expiration:
-        order.reservation_expires_at = pix_expiration
+    if order.reservation_expires_at != payment_expiration:
+        order.reservation_expires_at = payment_expiration
         order.save(
             update_fields=(
                 "reservation_expires_at",
@@ -544,9 +576,17 @@ def _prepare_payment(
 
     already_has_pix = (
         payment.status == PaymentStatus.PENDING
+        and payment.method == PaymentMethod.PIX
         and bool(payment.provider_order_id)
         and bool(payment.provider_payment_id)
         and bool(payment.pix_copy_paste)
+        and bool(payment.checkout_url)
+    )
+
+    already_has_hosted_checkout = (
+        payment.status == PaymentStatus.PENDING
+        and payment.method == PaymentMethod.CHECKOUT_PRO
+        and bool(payment.provider_order_id)
         and bool(payment.checkout_url)
     )
 
@@ -554,7 +594,10 @@ def _prepare_payment(
         order=order,
         payment=payment,
         created=payment_created,
-        requires_gateway=not already_has_pix,
+        requires_gateway=not (
+            already_has_pix
+            or already_has_hosted_checkout
+        ),
     )
 
 
@@ -684,11 +727,121 @@ def _save_pix_result(
     )
 
 
+def _hosted_checkout_items(order):
+    items = [
+        HostedCheckoutItem(
+            title=(
+                f"{item.ticket_type.name} — "
+                f"{order.event.title}"
+            ),
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+        )
+        for item in (
+            order.items
+            .select_related("ticket_type")
+            .order_by("created_at", "id")
+        )
+    ]
+
+    if order.service_fee > MONEY_ZERO:
+        items.append(
+            HostedCheckoutItem(
+                title="Taxa de serviço TicketJá",
+                quantity=1,
+                unit_price=order.service_fee,
+            )
+        )
+
+    return tuple(items)
+
+
+@transaction.atomic
+def _save_hosted_checkout_result(
+    *,
+    payment_id,
+    checkout_result,
+    created,
+):
+    payment = (
+        Payment.objects
+        .select_for_update()
+        .select_related("order")
+        .get(id=payment_id)
+    )
+    order = (
+        Order.objects
+        .select_for_update()
+        .get(id=payment.order_id)
+    )
+
+    if (
+        payment.status == PaymentStatus.PENDING
+        and payment.provider_order_id
+        and payment.checkout_url
+    ):
+        return PaymentInitiationResult(
+            order=order,
+            payment=payment,
+            created=False,
+            is_free=False,
+        )
+
+    if (
+        payment.status != PaymentStatus.CREATED
+        or payment.method != PaymentMethod.CHECKOUT_PRO
+    ):
+        raise _validation_error(
+            "Esta tentativa não pode mais receber uma sessão de checkout."
+        )
+
+    if order.status != OrderStatus.AWAITING_PAYMENT:
+        raise _validation_error(
+            "O pedido não está mais aguardando pagamento."
+        )
+
+    payment.provider_order_id = (
+        checkout_result.provider_order_id
+    )
+    payment.provider_status = checkout_result.provider_status
+    payment.provider_status_detail = (
+        checkout_result.provider_status_detail
+    )
+    payment.checkout_url = checkout_result.checkout_url
+    payment.expires_at = checkout_result.expires_at
+    payment.status = PaymentStatus.PENDING
+    payment.failure_code = ""
+    payment.failure_message = ""
+
+    payment.full_clean()
+    payment.save(
+        update_fields=(
+            "provider_order_id",
+            "provider_status",
+            "provider_status_detail",
+            "checkout_url",
+            "expires_at",
+            "status",
+            "failure_code",
+            "failure_message",
+            "updated_at",
+        )
+    )
+
+    return PaymentInitiationResult(
+        order=order,
+        payment=payment,
+        created=created,
+        is_free=False,
+    )
+
+
 def initiate_order_payment(
     *,
     order_id,
     buyer,
     payer_data=None,
+    return_urls=None,
     gateway=None,
     at=None,
 ):
@@ -725,11 +878,98 @@ def initiate_order_payment(
         if settings.MARKETPLACE_PAYMENTS_ENABLED:
             selected_gateway = (
                 get_payment_gateway_for_organization(
-                    prepared.order.organization
+                    prepared.order.organization,
+                    use_orders_api=(
+                        prepared.payment.method
+                        == PaymentMethod.CHECKOUT_PRO
+                    ),
                 )
             )
         else:
             selected_gateway = get_payment_gateway()
+
+    if prepared.payment.method == PaymentMethod.CHECKOUT_PRO:
+        if not isinstance(return_urls, CheckoutReturnUrls):
+            raise _validation_error(
+                "As URLs seguras de retorno do checkout não foram informadas."
+            )
+
+        checkout_request = HostedCheckoutRequest(
+            payment_id=prepared.payment.id,
+            idempotency_key=(
+                prepared.payment.idempotency_key
+            ),
+            external_reference=(
+                prepared.payment.external_reference
+            ),
+            description=(
+                f"Pedido {prepared.order.public_code} - "
+                f"{prepared.order.event.title}"
+            )[:255],
+            amount=prepared.payment.amount,
+            platform_fee=prepared.payment.platform_fee,
+            payer_email=(
+                prepared.payment.payer_email
+                or prepared.order.buyer.email
+            ),
+            expires_at=prepared.payment.expires_at,
+            expiration_seconds=(
+                settings.PAYMENT_CHECKOUT_EXPIRATION_MINUTES
+                * 60
+            ),
+            success_url=return_urls.success,
+            pending_url=return_urls.pending,
+            failure_url=return_urls.failure,
+            items=_hosted_checkout_items(prepared.order),
+            provider_account_reference=(
+                prepared.payment.provider_account_reference
+            ),
+        )
+
+        try:
+            checkout_result = (
+                selected_gateway.create_hosted_checkout(
+                    checkout_request
+                )
+            )
+        except PaymentGatewayTemporaryError as error:
+            _record_gateway_failure(
+                payment_id=prepared.payment.id,
+                code="temporary_provider_error",
+                message=error,
+                terminal=False,
+            )
+            raise
+        except PaymentGatewayRejectedError as error:
+            _record_gateway_failure(
+                payment_id=prepared.payment.id,
+                code="provider_rejected",
+                message=error,
+                terminal=True,
+            )
+            raise
+        except PaymentGatewayConfigurationError as error:
+            _record_gateway_failure(
+                payment_id=prepared.payment.id,
+                code="provider_configuration",
+                message=error,
+                terminal=False,
+            )
+            raise
+        except PaymentGatewayError as error:
+            _record_gateway_failure(
+                payment_id=prepared.payment.id,
+                code="provider_error",
+                message=error,
+                terminal=False,
+            )
+            raise
+
+        return _save_hosted_checkout_result(
+            payment_id=prepared.payment.id,
+            checkout_result=checkout_result,
+            created=prepared.created,
+        )
 
     payer_document_number = ""
 

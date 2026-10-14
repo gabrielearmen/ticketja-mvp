@@ -63,6 +63,17 @@ def marketplace_configuration_check(app_configs, **kwargs):
         )
 
     if settings.MARKETPLACE_PAYMENTS_ENABLED:
+        if settings.MARKETPLACE_CHECKOUT_MODE not in {
+            "checkout_pro",
+            "pix",
+        }:
+            errors.append(
+                Error(
+                    "MARKETPLACE_CHECKOUT_MODE deve ser checkout_pro ou pix.",
+                    id="marketplace.E007",
+                )
+            )
+
         if not settings.MARKETPLACE_OAUTH_ENABLED:
             errors.append(
                 Error(

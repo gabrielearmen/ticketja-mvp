@@ -62,6 +62,40 @@ class PixChargeResult:
 
 
 @dataclass(frozen=True, slots=True)
+class HostedCheckoutItem:
+    title: str
+    quantity: int
+    unit_price: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class HostedCheckoutRequest:
+    payment_id: UUID
+    idempotency_key: UUID
+    external_reference: str
+    description: str
+    amount: Decimal
+    platform_fee: Decimal
+    payer_email: str
+    expires_at: datetime
+    expiration_seconds: int
+    success_url: str
+    pending_url: str
+    failure_url: str
+    items: tuple[HostedCheckoutItem, ...]
+    provider_account_reference: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class HostedCheckoutResult:
+    provider_order_id: str
+    provider_status: str
+    provider_status_detail: str
+    checkout_url: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class PaymentSnapshot:
     provider_order_id: str
     provider_payment_id: str
@@ -86,6 +120,18 @@ class PaymentGateway(ABC):
         self,
         request: PixChargeRequest,
     ) -> PixChargeResult:
+        raise NotImplementedError
+
+    def create_hosted_checkout(
+        self,
+        request: HostedCheckoutRequest,
+    ) -> HostedCheckoutResult:
+        """
+        Cria uma sessão de checkout fora do TicketJá.
+
+        Não é abstrato para preservar compatibilidade com gateways
+        antigos durante a migração controlada do PIX direto.
+        """
         raise NotImplementedError
 
     @abstractmethod

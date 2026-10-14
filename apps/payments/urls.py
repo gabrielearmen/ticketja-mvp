@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    checkout_return,
     mercado_pago_order_webhook,
     payer_details,
     payment_detail,
@@ -26,6 +27,11 @@ urlpatterns = [
         "checkout/<str:public_code>/pagamento/status/",
         payment_status_snapshot,
         name="status",
+    ),
+    path(
+        "checkout/<str:public_code>/pagamento/retorno/<str:outcome>/",
+        checkout_return,
+        name="return",
     ),
     path(
         "webhooks/mercado-pago/payments/",

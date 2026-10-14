@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -227,7 +227,10 @@ class PaymentCheckoutViewTests(TestCase):
             buyer=self.buyer,
         )
 
-    @override_settings(MARKETPLACE_PAYMENTS_ENABLED=True)
+    @override_settings(
+        MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_CHECKOUT_MODE="pix",
+    )
     @patch(
         "apps.registrations.views."
         "initiate_order_payment"
@@ -253,7 +256,10 @@ class PaymentCheckoutViewTests(TestCase):
         )
         payment_service.assert_not_called()
 
-    @override_settings(MARKETPLACE_PAYMENTS_ENABLED=True)
+    @override_settings(
+        MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_CHECKOUT_MODE="pix",
+    )
     @patch("apps.payments.views.initiate_order_payment")
     def test_payer_form_starts_payment_with_validated_cpf(
         self,
@@ -289,9 +295,13 @@ class PaymentCheckoutViewTests(TestCase):
                 "document_type": "CPF",
                 "document_number": "52998224725",
             },
+            return_urls=None,
         )
 
-    @override_settings(MARKETPLACE_PAYMENTS_ENABLED=True)
+    @override_settings(
+        MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_CHECKOUT_MODE="pix",
+    )
     @patch("apps.payments.views.initiate_order_payment")
     def test_invalid_payer_cpf_does_not_start_payment(
         self,
@@ -313,6 +323,77 @@ class PaymentCheckoutViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Informe um CPF válido")
         payment_service.assert_not_called()
+
+    @override_settings(
+        MARKETPLACE_PAYMENTS_ENABLED=True,
+        MARKETPLACE_CHECKOUT_MODE="checkout_pro",
+    )
+    @patch("apps.payments.views.initiate_order_payment")
+    def test_checkout_pro_redirects_to_provider_without_collecting_card_data(
+        self,
+        payment_service,
+    ):
+        checkout_url = (
+            "https://www.mercadopago.com.br/"
+            "checkout/v1/redirect?order_id=ORD-001"
+        )
+        payment_service.return_value = SimpleNamespace(
+            is_free=False,
+            payment=SimpleNamespace(
+                checkout_url=checkout_url,
+            ),
+        )
+        self.client.force_login(self.buyer)
+        url = reverse(
+            "payments:payer-details",
+            kwargs={"public_code": self.order.public_code},
+        )
+
+        page = self.client.get(url)
+
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Ir para o Mercado Pago")
+        self.assertNotContains(page, "CPF do pagador")
+
+        response = self.client.post(url, {})
+
+        self.assertRedirects(
+            response,
+            checkout_url,
+            fetch_redirect_response=False,
+        )
+        payment_service.assert_called_once_with(
+            order_id=self.order.id,
+            buyer=self.buyer,
+            payer_data=None,
+            return_urls=ANY,
+        )
+
+    def test_checkout_return_does_not_trust_provider_query_status(self):
+        self.create_pending_payment()
+        self.client.force_login(self.buyer)
+
+        response = self.client.get(
+            reverse(
+                "payments:return",
+                kwargs={
+                    "public_code": self.order.public_code,
+                    "outcome": "sucesso",
+                },
+            ),
+            {"status": "approved"},
+        )
+
+        self.assertRedirects(
+            response,
+            self.payment_url,
+            fetch_redirect_response=False,
+        )
+        self.order.refresh_from_db()
+        self.assertEqual(
+            self.order.status,
+            OrderStatus.AWAITING_PAYMENT,
+        )
 
     def test_payment_page_displays_pix(self):
         self.create_pending_payment()

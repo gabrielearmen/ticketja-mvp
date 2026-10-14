@@ -1,9 +1,10 @@
 # Pagamentos marketplace — operação segura
 
 O TicketJá utiliza o modelo **Split de Pagamentos 1:1** do Mercado Pago.
-Cada organização conecta sua própria conta via OAuth. O PIX é criado com o
-Access Token dessa conta e a comissão do TicketJá é enviada como
-`application_fee`.
+Cada organização conecta sua própria conta via OAuth. O TicketJá cria uma
+ordem do **Checkout Pro** com o Access Token dessa conta e envia sua comissão
+em `marketplace_fee`. O comprador conclui o pagamento no Mercado Pago, que
+exibe cartão, PIX e outros meios habilitados para a conta recebedora.
 
 ## O que nunca deve ser feito
 
@@ -29,8 +30,8 @@ Access Token dessa conta e a comissão do TicketJá é enviada como
    `MARKETPLACE_PAYMENTS_ENABLED=false`.
 8. Cada proprietário acessa **Painel → Recebimentos** e conecta sua conta.
 9. Cadastre a política de comissão com o comando abaixo.
-10. No Mercado Pago, configure notificações do tipo pagamento para
-    `https://SEU-DOMINIO/webhooks/mercado-pago/payments/` e salve a chave
+10. No Mercado Pago, configure notificações do tipo **order** para
+    `https://SEU-DOMINIO/webhooks/mercado-pago/orders/` e salve a chave
     em `MERCADO_PAGO_WEBHOOK_SECRET`.
 11. Homologue criação, pagamento, repetição de webhook, expiração e
     cancelamento no ambiente de teste.
@@ -43,12 +44,14 @@ Access Token dessa conta e a comissão do TicketJá é enviada como
 ```text
 MARKETPLACE_OAUTH_ENABLED=true
 MARKETPLACE_PAYMENTS_ENABLED=false
+MARKETPLACE_CHECKOUT_MODE=checkout_pro
 MARKETPLACE_TOKEN_ENCRYPTION_KEYS=<chave-fernet>
 MERCADO_PAGO_CLIENT_ID=<app-id>
 MERCADO_PAGO_CLIENT_SECRET=<secret-key>
 MERCADO_PAGO_OAUTH_REDIRECT_URI=https://SEU-DOMINIO/painel/recebimentos/mercado-pago/retorno/
 MERCADO_PAGO_WEBHOOK_SECRET=<assinatura-do-webhook>
 MERCADO_PAGO_TEST_MODE=true
+PAYMENT_CHECKOUT_EXPIRATION_MINUTES=35
 ```
 
 Em uma rotação de criptografia, coloque a chave nova primeiro e mantenha a
@@ -93,16 +96,18 @@ python manage.py configure_marketplace_fee `
 No MVP, a política é administrada pela plataforma. O organizador não altera
 percentual ou responsável pela taxa sem autorização comercial.
 
-## Dados do pagador
+## Checkout e dados financeiros
 
 Em pedidos pagos, o fluxo é:
 
-`Participantes → Dados do pagador → PIX → Confirmação`.
+`Participantes → Confirmação → Checkout Pro → Confirmação`.
 
-O pagador pode ser diferente dos participantes. O CPF é validado, armazenado
-com criptografia e enviado ao provedor somente pelo backend. O número completo
-não aparece em templates, JavaScript, logs, QR Code ou Django Admin. Pedidos
-gratuitos não solicitam documento de cobrança.
+O Mercado Pago coleta os dados exigidos para o meio escolhido. Número do
+cartão, validade e CVV nunca passam pelo backend nem são armazenados pelo
+TicketJá. O retorno do navegador não confirma o pedido: apenas um webhook
+autenticado ou uma consulta autenticada ao provedor pode alterar o estado
+financeiro. Pedidos gratuitos continuam sendo confirmados internamente, sem
+criar uma cobrança externa.
 
 ## Conciliação periódica
 

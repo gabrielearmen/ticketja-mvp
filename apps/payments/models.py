@@ -37,6 +37,7 @@ class PaymentProvider(models.TextChoices):
 
 class PaymentMethod(models.TextChoices):
     FREE = "gratuito", "Gratuito"
+    CHECKOUT_PRO = "checkout_pro", "Checkout Pro"
     PIX = "pix", "PIX"
     BOLETO = "boleto", "Boleto"
     CARD = "cartao", "Cartão"

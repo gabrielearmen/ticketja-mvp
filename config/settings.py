@@ -440,6 +440,15 @@ PAYMENT_PIX_EXPIRATION_MINUTES = environment_integer(
     maximum=1440,
 )
 
+# Prazo da sessão hospedada. É separado do PIX legado para que
+# futuras regras do Checkout Pro não alterem cobranças antigas.
+PAYMENT_CHECKOUT_EXPIRATION_MINUTES = environment_integer(
+    "PAYMENT_CHECKOUT_EXPIRATION_MINUTES",
+    default=35,
+    minimum=30,
+    maximum=1440,
+)
+
 PAYMENT_RECONCILIATION_MIN_INTERVAL_MINUTES = environment_integer(
     "PAYMENT_RECONCILIATION_MIN_INTERVAL_MINUTES",
     default=5,
@@ -490,6 +499,15 @@ MARKETPLACE_PAYMENTS_ENABLED = environment_boolean(
     "MARKETPLACE_PAYMENTS_ENABLED",
     default=False,
 )
+
+# Fluxo usado para cobranças marketplace.
+# "checkout_pro" redireciona o comprador ao ambiente seguro do
+# Mercado Pago e permite os meios habilitados na conta do vendedor.
+# "pix" existe somente para compatibilidade com cobranças antigas.
+MARKETPLACE_CHECKOUT_MODE = os.environ.get(
+    "MARKETPLACE_CHECKOUT_MODE",
+    "checkout_pro",
+).strip().lower()
 
 MARKETPLACE_OAUTH_ENABLED = environment_boolean(
     "MARKETPLACE_OAUTH_ENABLED",

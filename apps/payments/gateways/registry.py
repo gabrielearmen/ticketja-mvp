@@ -48,7 +48,11 @@ def clear_payment_gateway_cache():
     get_payment_gateway.cache_clear()
 
 
-def get_payment_gateway_for_organization(organization):
+def get_payment_gateway_for_organization(
+    organization,
+    *,
+    use_orders_api=False,
+):
     """Seleciona a credencial do recebedor quando o marketplace está ativo."""
     if not settings.MARKETPLACE_PAYMENTS_ENABLED:
         return get_payment_gateway()
@@ -88,11 +92,29 @@ def get_payment_gateway_for_organization(organization):
         )
 
     return MercadoPagoGateway(
-        access_token=credentials.access_token
+        access_token=credentials.access_token,
+        use_orders_api=use_orders_api,
     )
 
 
 def get_payment_gateway_for_payment(payment):
+    from .models import PaymentMethod
+
+    if payment.method == PaymentMethod.CHECKOUT_PRO:
+        order = payment.order
+
+        if not hasattr(order, "organization"):
+            from apps.orders.models import Order
+
+            order = Order.objects.select_related(
+                "organization"
+            ).get(id=payment.order_id)
+
+        return get_payment_gateway_for_organization(
+            order.organization,
+            use_orders_api=True,
+        )
+
     is_legacy_order = (
         bool(payment.provider_order_id)
         and bool(payment.provider_payment_id)

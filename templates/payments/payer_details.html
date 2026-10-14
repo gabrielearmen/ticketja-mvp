@@ -24,11 +24,19 @@
 
             <header class="checkout-heading">
                 <p class="checkout-heading__eyebrow">Finalização da inscrição</p>
-                <h1>Dados do pagador</h1>
-                <p>
-                    Informe os dados da pessoa que fará o PIX. Ela pode ser
-                    diferente dos participantes inscritos.
-                </p>
+                {% if uses_hosted_checkout %}
+                    <h1>Pagamento seguro</h1>
+                    <p>
+                        Você será direcionado ao Mercado Pago para escolher
+                        cartão, PIX ou outro meio disponível.
+                    </p>
+                {% else %}
+                    <h1>Dados do pagador</h1>
+                    <p>
+                        Informe os dados da pessoa que fará o PIX. Ela pode ser
+                        diferente dos participantes inscritos.
+                    </p>
+                {% endif %}
             </header>
 
             <ol class="checkout-steps" aria-label="Etapas da inscrição">
@@ -54,34 +62,39 @@
                             </div>
                         {% endif %}
 
-                        <div class="checkout-field">
-                            <label for="{{ form.full_name.id_for_label }}">
-                                {{ form.full_name.label }}
-                            </label>
-                            {{ form.full_name }}
-                            {% for error in form.full_name.errors %}
-                                <p class="checkout-field-errors" role="alert">{{ error }}</p>
-                            {% endfor %}
-                        </div>
+                        {% if not uses_hosted_checkout %}
+                            <div class="checkout-field">
+                                <label for="{{ form.full_name.id_for_label }}">
+                                    {{ form.full_name.label }}
+                                </label>
+                                {{ form.full_name }}
+                                {% for error in form.full_name.errors %}
+                                    <p class="checkout-field-errors" role="alert">{{ error }}</p>
+                                {% endfor %}
+                            </div>
 
-                        <div class="checkout-field">
-                            <label for="{{ form.document_number.id_for_label }}">
-                                {{ form.document_number.label }}
-                            </label>
-                            {{ form.document_number }}
-                            <p class="checkout-field__hint">
-                                O CPF será criptografado e utilizado somente no processamento financeiro.
-                            </p>
-                            {% for error in form.document_number.errors %}
-                                <p class="checkout-field-errors" role="alert">{{ error }}</p>
-                            {% endfor %}
-                        </div>
+                            <div class="checkout-field">
+                                <label for="{{ form.document_number.id_for_label }}">
+                                    {{ form.document_number.label }}
+                                </label>
+                                {{ form.document_number }}
+                                <p class="checkout-field__hint">
+                                    O CPF será criptografado e utilizado somente no processamento financeiro.
+                                </p>
+                                {% for error in form.document_number.errors %}
+                                    <p class="checkout-field-errors" role="alert">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
 
                         <div class="checkout-field">
                             <span>E-mail da conta</span>
                             <strong>{{ buyer_email }}</strong>
                             <p class="checkout-field__hint">
                                 A confirmação será vinculada à sua conta TicketJá.
+                                {% if uses_hosted_checkout %}
+                                    Os dados do meio de pagamento serão informados somente no Mercado Pago.
+                                {% endif %}
                             </p>
                         </div>
 
@@ -93,7 +106,11 @@
                                 Voltar
                             </a>
                             <button class="button button--primary" type="submit">
-                                Gerar PIX
+                                {% if uses_hosted_checkout %}
+                                    Ir para o Mercado Pago
+                                {% else %}
+                                    Gerar PIX
+                                {% endif %}
                             </button>
                         </footer>
                     </form>
